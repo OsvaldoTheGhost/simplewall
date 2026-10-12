@@ -376,6 +376,24 @@ def d_poly(cv, pts, col, th=1.0, closed=False, dash=None):
     cv.Children.Add(s)
 
 
+def d_polygon(cv, pts, stroke, fill=None, th=1.0, dash=None):
+    """Poligono cerrado con relleno (la viga con pendiente no es un rectangulo)."""
+    pc = PointCollection()
+    for p in pts:
+        pc.Add(Point(float(p[0]), float(p[1])))
+    s = Polygon()
+    s.Points = pc
+    s.Stroke = brush(stroke)
+    if fill:
+        s.Fill = brush(fill)
+    s.StrokeThickness = float(th)
+    s.StrokeLineJoin = PenLineJoin.Round
+    if dash:
+        s.StrokeDashArray = _dash(dash)
+    s.IsHitTestVisible = False
+    cv.Children.Add(s)
+
+
 def d_text(cv, x, y, text, col, size=11.0, anchor='lt', bold=False):
     tb = TextBlock()
     tb.Text = text
@@ -1597,6 +1615,60 @@ class BeamRebarWindow(forms.WPFWindow):
                 px, py = P(x, b['y'])
                 d_circle(cv, px, py, r, '#CDE8FF', col, 0.8)
 
+    def _elev_mapping(self, W, H, S0, S1, pad, y_top, bh, sy):
+        """Q(s, y) -> pixeles. Viga horizontal: s a lo largo y y vertical (como siempre). Viga con pendiente
+        (perfil): la linea del perfil a escala real en h y Z (la pendiente se ve como es; si no cabe en altura
+        se comprime en Z) y y perpendicular a cada tramo con la escala de la seccion. En los quiebres el punto
+        va a la bisectriz, como las varillas en el modelo."""
+        m = self.model
+        sx = (W - 2 * pad) / max(S1 - S0, 1.0)
+        prof = getattr(m, 'profile', None) if getattr(m, 'slope', 0.0) > 0.05 else None
+        if not prof or len(prof) < 2:
+            X = lambda s_: pad + (s_ - S0) * sx
+            Y = lambda y: y_top + (m.h / 2.0 - y) * sy
+            return (lambda s_, y: (X(s_), Y(y))), sx, None
+        V = prof
+        seg = []
+        for (s0, h0, z0), (s1, h1, z1) in zip(V, V[1:]):
+            L = max(s1 - s0, 1e-6)
+            seg.append((s0, h0, z0, (h1 - h0) / L, (z1 - z0) / L))
+        off = getattr(m, 'profile_off', 0.0)
+
+        def base(s_):
+            k = 0
+            while k < len(seg) - 1 and s_ >= seg[k + 1][0] - 1e-6:
+                k += 1
+            q = seg[k]
+            t = s_ - q[0]
+            return k, q[1] + q[3] * t, q[2] + q[4] * t
+
+        ends = [base(x) for x in [S0, S1] + [q[0] for q in seg[1:] if S0 < q[0] < S1]]
+        hmin, hmax = min(e[1] for e in ends), max(e[1] for e in ends)
+        zmin, zmax = min(e[2] for e in ends), max(e[2] for e in ends)
+        sxh = (W - 2 * pad) / max(hmax - hmin, 1.0)
+        half = m.h / 2.0 * sy
+        lo, hi = 30.0 + half + 4.0, H - 42.0 - half          # banda vertical para la linea del perfil
+        kz = sxh if (zmax - zmin) * sxh <= hi - lo else (hi - lo) / max(zmax - zmin, 1e-6)
+        # pixel de zmin en la linea del perfil; la banda es para el eje de la viga (y = 0), a 'off' del perfil
+        yc0 = (lo + hi) / 2.0 + (zmax - zmin) * kz / 2.0 + off * sy
+
+        def Q(s_, y):
+            k, h, z = base(s_)
+            q = seg[k]
+            nh, nz = -q[4], q[3]
+            d = y + off
+            if k > 0 and abs(s_ - q[0]) < 1e-6:               # quiebre: bisectriz
+                pq = seg[k - 1]
+                bh_, bz_ = -(pq[4] + q[4]), pq[3] + q[3]
+                Lb = math.hypot(bh_, bz_)
+                bh_, bz_ = bh_ / Lb, bz_ / Lb
+                c = max(bh_ * nh + bz_ * nz, 0.2)
+                nh, nz = bh_ / c, bz_ / c
+            # la seccion (d) se dibuja con la escala sy; la linea del perfil con sxh / kz
+            return pad + (h - hmin) * sxh + nh * d * sy, yc0 - (z - zmin) * kz - nz * d * sy
+
+        return Q, sx, [q[0] for q in seg[1:]]
+
     def _draw_elev(self):
         cv = self.elevCanvas
         cv.Children.Clear()
@@ -1610,48 +1682,61 @@ class BeamRebarWindow(forms.WPFWindow):
             S0 = min(S0, b['s0'])
             S1 = max(S1, b['s1'])
         pad = 34.0
-        sx = (W - 2 * pad) / max(S1 - S0, 1.0)
         y_top = H * 0.27
         bh = H * 0.36
         sy = bh / m.h
+        Q, sx, kinks = self._elev_mapping(W, H, S0, S1, pad, y_top, bh, sy)
+        kinks = kinks or []
 
-        def X(s):
-            return pad + (s - S0) * sx
+        def XS(s_):
+            return Q(s_, 0.0)[0]
 
-        def Y(y):
-            return y_top + (m.h / 2.0 - y) * sy
+        def run(s0, s1):
+            """Valores de s de s0 a s1 con los quiebres del perfil en medio (para seguir la pendiente)."""
+            ks = [k for k in kinks if min(s0, s1) + 1e-6 < k < max(s0, s1) - 1e-6]
+            return [s0] + sorted(ks, reverse=s1 < s0) + [s1]
 
-        self._elev_map = (S0, sx, pad)
+        # mapa para el clic: x (pixel) -> s
+        samp = [S0 + (S1 - S0) * i / 200.0 for i in range(201)]
+        self._elev_map = [(XS(x), x) for x in samp]
         if getattr(m, 'slope', 0.0) > 0.05:
             sl = getattr(m, 'slopes', None) or [m.slope]
             txt = u' → '.join(u'%.1f°' % a for a in sl)
-            d_text(cv, W - 8, 4, (u'Pendiente %s · alzado desarrollado a lo largo de la viga' if self.lang == 0
-                                  else u'Slope %s · elevation unrolled along the beam') % txt, '#F0A030', 10.5, 'rt')
-        # apoyos
+            d_text(cv, W - 8, 4, (u'Pendiente %s · alzado a lo largo de la viga (longitudes sobre la viga)'
+                                  if self.lang == 0 else u'Slope %s · elevation along the beam') % txt,
+                   '#F0A030', 10.5, 'rt')
+        # apoyos (verticales, a la altura de la viga en ese punto)
         for n in m.nodes:
+            xm, ym = Q(n.mid, 0.0)
+            yt_, yb_ = Q(n.mid, m.h / 2.0)[1], Q(n.mid, -m.h / 2.0)[1]
             if n.free:
-                d_line(cv, X(n.s0), y_top - 10, X(n.s0), y_top + bh + 10, C['dim'], 1.0, (2, 3))
+                d_line(cv, xm, yt_ - 10, xm, yb_ + 10, C['dim'], 1.0, (2, 3))
                 continue
             if n.kind == u'cambio':
-                d_line(cv, X(n.s0), y_top - 18, X(n.s0), y_top + bh + 18, '#F0A030', 1.0, (4, 3))
-                d_text(cv, X(n.s0), y_top - 20, n.name, '#F0A030', 10.0, 'cb')
+                d_line(cv, xm, yt_ - 18, xm, yb_ + 18, '#F0A030', 1.0, (4, 3))
+                d_text(cv, xm, yt_ - 20, n.name, '#F0A030', 10.0, 'cb')
                 continue
-            d_rect(cv, X(n.s0), y_top - 30, (n.s1 - n.s0) * sx, bh + 60, C['sup_line'], C['support'], 1.0, (5, 3))
-            xm = X(n.mid)
-            d_line(cv, xm, 26, xm, y_top + bh + 40, '#6A6A6A', 0.8, (8, 3, 2, 3))
+            xa, xb = XS(n.s0), XS(n.s1)
+            d_rect(cv, xa, yt_ - 30, xb - xa, (yb_ - yt_) + 60, C['sup_line'], C['support'], 1.0, (5, 3))
+            d_line(cv, xm, 26, xm, yb_ + 40, '#6A6A6A', 0.8, (8, 3, 2, 3))
             d_circle(cv, xm, 15, 11, '#BDBDBD', '#27272A', 1.2)
             d_text(cv, xm, 15, n.name, C['bright'], 10.5, 'cc')
+
+        def band(s0, s1, yt_, yb_):
+            ss = run(s0, s1)
+            return [Q(x, yt_) for x in ss] + [Q(x, yb_) for x in reversed(ss)]
+
         # viga (cada pieza con su seccion: cambios de peralte o de nivel)
         parts = m.parts or [{'s0': 0.0, 's1': m.L, 'yc': 0.0, 'h': m.h}]
         for p in parts:
-            d_rect(cv, X(p['s0']), Y(p['yc'] + p['h'] / 2.0), (p['s1'] - p['s0']) * sx, p['h'] * sy,
-                   C['conc_line'], C['concrete'], 1.0)
+            pts = band(p['s0'], p['s1'], p['yc'] + p['h'] / 2.0, p['yc'] - p['h'] / 2.0)
+            d_polygon(cv, pts, C['conc_line'], C['concrete'], 1.0)
         # tramo seleccionado
         fa, fb = m.span_faces(self.cur_span)
         sc = m.sec(self.cur_span)
-        d_rect(cv, X(fa), Y(sc['yc'] + sc['h'] / 2.0), (fb - fa) * sx, sc['h'] * sy, '#3DA5F5', '#20304A', 1.0,
-               (4, 3))
-        # estribos
+        d_polygon(cv, band(fa, fb, sc['yc'] + sc['h'] / 2.0, sc['yc'] - sc['h'] / 2.0), '#3DA5F5', '#20304A',
+                  1.0, (4, 3))
+        # estribos (perpendiculares a la viga)
         sets = res['stirrups']
         total = sum(t['n'] for t in sets)
         if sets and total <= 2000:
@@ -1663,8 +1748,9 @@ class BeamRebarWindow(forms.WPFWindow):
                 y1 = max(q[1] for q in poly)
                 y0 = min(q[1] for q in poly)
                 for k in range(t['n']):
-                    xx = X(t['s0'] + k * t['sp'])
-                    d_line(cv, xx, Y(y1), xx, Y(y0), col, 1.0)
+                    sk = t['s0'] + k * t['sp']
+                    a_, b_ = Q(sk, y1), Q(sk, y0)
+                    d_line(cv, a_[0], a_[1], b_[0], b_[1], col, 1.0)
         # varillas
         focus = {1: ('top_main', 'bot_main'), 2: ('top_add',), 3: ('bot_add',), 4: ('side',)}.get(self.page)
         for b in sorted(res['bars'], key=lambda q: 1 if (focus and q['kind'] in focus) else 0):
@@ -1672,51 +1758,58 @@ class BeamRebarWindow(forms.WPFWindow):
             th = 2.2 if (focus is None or b['kind'] in focus) else 1.2
             if focus and b['kind'] not in focus:
                 col = '#44607A'
-            pts = []
             yb = b['y']
             dys = (4.0 if b['shift'] < 0 else -4.0) if b.get('shift') else 0.0   # desfasado (en pixeles)
+            sv = []                                      # (s, y, dpx)
             if abs(b['leg0']) > 0.01:
-                pts.append((X(b['s0']), Y(yb + b['leg0']) + dys))
-            pts.append((X(b['s0']), Y(yb) + dys))
+                sv.append((b['s0'], yb + b['leg0'], dys))
             ck = b.get('crank')
             if ck:
                 # bayoneta: se dibuja desplazada unos pixeles para que se vea el traslape
-                run = max(6.0 * b['bt']['dm'] * sx, 6.0)
+                run6 = max(6.0 * b['bt']['dm'], 6.0 / max(sx, 1e-6))
                 dyp = 4.0 if ck[1] < 0 else -4.0
-                pts += [(X(ck[0]) - run, Y(b['y'])), (X(ck[0]), Y(b['y']) + dyp), (X(b['s1']), Y(b['y']) + dyp)]
+                for x in run(b['s0'], ck[0] - run6):
+                    sv.append((x, yb, dys))
+                sv += [(ck[0], yb, dyp), (b['s1'], yb, dyp)]
             else:
-                pts.append((X(b['s1']), Y(yb) + dys))
+                for x in run(b['s0'], b['s1']):
+                    sv.append((x, yb, dys))
             if abs(b['leg1']) > 0.01:
-                pts.append((X(b['s1']), Y(yb + b['leg1']) + dys))
+                sv.append((b['s1'], yb + b['leg1'], dys))
+            pts = []
+            for x, y, dp in sv:
+                px, py = Q(x, y)
+                pts.append((px, py + dp))
             d_poly(cv, pts, col, th)
             # gancho horizontal (hacia el centro de la viga): se ve de punta en el alzado
             hin = b.get('hin') or (0.0, 0.0)
             for s_end, L in ((b['s0'], hin[0]), (b['s1'], hin[1])):
                 if L > 0.01:
-                    d_circle(cv, X(s_end), Y(yb) + dys, 3.2, col, col, 1.0)
-        # cotas
+                    px, py = Q(s_end, yb)
+                    d_circle(cv, px, py + dys, 3.2, col, col, 1.0)
+        # cotas (longitudes a lo largo de la viga)
         yd = H - 24
-        xa, xb = X(m.nodes[0].s0), X(m.nodes[-1].s1)
+        xa, xb = XS(m.nodes[0].s0), XS(m.nodes[-1].s1)
         d_line(cv, xa, yd, xb, yd, C['dim'], 0.8)
         marks = []
         for n in m.nodes:
             marks += [n.s0, n.s1]
-        for s in marks:
-            d_line(cv, X(s), yd - 5, X(s), yd + 5, C['dim'], 0.8)
+        for s_ in marks:
+            d_line(cv, XS(s_), yd - 5, XS(s_), yd + 5, C['dim'], 0.8)
         for n in m.nodes:
             if not n.free and n.kind != u'cambio':
-                d_text(cv, X(n.mid), yd + 3, fm(n.width), C['text'], 10.5, 'ct')
+                d_text(cv, XS(n.mid), yd + 3, fm(n.width), C['text'], 10.5, 'ct')
         for k in range(m.n_spans):
             a, b = m.span_faces(k)
-            d_text(cv, X((a + b) / 2.0), yd - 3, fm(b - a), C['bright'] if k == self.cur_span else C['text'],
+            d_text(cv, XS((a + b) / 2.0), yd - 3, fm(b - a), C['bright'] if k == self.cur_span else C['text'],
                    11, 'cb', k == self.cur_span)
 
     def _on_elev_click(self, s, a):
-        if not getattr(self, '_elev_map', None):
+        mp = getattr(self, '_elev_map', None)
+        if not mp:
             return
-        S0, sx, pad = self._elev_map
         p = a.GetPosition(self.elevCanvas)
-        sv = S0 + (p.X - pad) / sx
+        sv = min(mp, key=lambda q: abs(q[0] - p.X))[1]
         ns = self.model.n_spans
         for i in range(ns):
             lo = self.model.nodes[i].mid if i > 0 else -1e12

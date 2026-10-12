@@ -273,6 +273,20 @@ def row_fits(row, db, model, cover, ds, tol=0.5):
     return yb - tol <= row['y'] <= yt + tol and all(abs(x - sc['xc']) <= xr + tol for x in row['xs'])
 
 
+def row_inside(row, db, model, cover, ds, tol=0.5):
+    """La fila cabe en la zona de varillas de la seccion, o (escalon entre vigas de distinto nivel) queda
+    dentro de su concreto: entre sus caras con al menos medio diametro y a lo ancho dentro de la zona de
+    varillas. Asi, en un escalon como el de los planos (vigas encimadas en el apoyo) las varillas de cada
+    viga siguen rectas su anclaje dentro de la otra en lugar de terminar con gancho."""
+    if row_fits(row, db, model, cover, ds, tol):
+        return True
+    sc = as_section(model)
+    xr = x_range(sc, cover, ds, db)
+    lo = sc['yc'] - sc['h'] / 2.0 + db / 2.0
+    hi = sc['yc'] + sc['h'] / 2.0 - db / 2.0
+    return lo - tol <= row['y'] <= hi + tol and all(abs(x - sc['xc']) <= xr + tol for x in row['xs'])
+
+
 def layer_rows(model, cover, ds, tmin, mrow, layers, bts, top):
     """Posicion (xs, y, db) de cada capa adicional.
     Capa 1: en los huecos entre las varillas corridas si caben; si no, en
@@ -658,7 +672,7 @@ def compute(model, cfg, bts):
                 return s, 0.0, 'recta'
             leg = leg_user if leg_user > 0.01 else round_up(12.0 * bt['dn'], 5.0)
             return s, (-leg if top else leg), 'gancho'
-        if row_fits(row, bt['dm'], model.sec(other), cover, ds_bar[other]):
+        if row_inside(row, bt['dm'], model.sec(other), cover, ds_bar[other]):
             return (nd.s0 - L if side == 'start' else nd.s1 + L), 0.0, 'recta'
         leg = leg_user if leg_user > 0.01 else round_up(12.0 * bt['dn'], 5.0)
         s = nd.s0 + cover if side == 'start' else nd.s1 - cover
@@ -759,7 +773,7 @@ def compute(model, cfg, bts):
             if b['s1'] <= nd.s1 + 0.5:
                 break
             if model.is_joint(ni) and (model.is_anchor_bend(ni) or
-                                       not row_fits(row, db, model.sec(ni), cover, ds_bar[ni])):
+                                       not row_inside(row, db, model.sec(ni), cover, ds_bar[ni])):
                 b['s1'] = nd.s1 - cover
                 b['leg1'] = cut_leg(nd, ni, ni)
                 warns.append(u'%s: se corta en el %s %s' % (b['label'], why(ni), nd.name))
@@ -769,7 +783,7 @@ def compute(model, cfg, bts):
             if b['s0'] >= nd.s0 - 0.5:
                 break
             if model.is_joint(ni) and (model.is_anchor_bend(ni) or
-                                       not row_fits(row, db, model.sec(ni - 1), cover, ds_bar[ni - 1])):
+                                       not row_inside(row, db, model.sec(ni - 1), cover, ds_bar[ni - 1])):
                 b['s0'] = nd.s0 + cover
                 b['leg0'] = cut_leg(nd, ni, ni - 1)
                 warns.append(u'%s: se corta en el %s %s' % (b['label'], why(ni), nd.name))

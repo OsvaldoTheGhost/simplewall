@@ -488,7 +488,7 @@ MAX_SKEW_DEG = 30.0                  # mas giro que esto respecto a la cadena: n
 MIN_Z_OVERLAP = 10.0 / FT            # dos vigas seguidas deben traslaparse al menos esto en altura
 MAX_STEP = 30.0 / FT                 # escalon: hueco vertical maximo entre dos vigas seguidas (si se separan mas,
                                      # como una contratrabe y una trabe de otro nivel, se arman aparte)
-MAX_STEP_OVERLAP = 60.0 / FT         # en planta, una viga escalonada puede entrar en la otra a lo mas esto
+MAX_STEP_OVERLAP = 150.0 / FT         # en planta, una viga escalonada puede entrar en la otra a lo mas esto
 
 
 def _level_step(A, B):

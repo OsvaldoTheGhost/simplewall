@@ -152,6 +152,14 @@ class Session(object):
         fr = info.get('frame')
         model.slope = abs(fr.angle) if getattr(fr, 'sloped', False) else 0.0      # para el alzado
         model.slopes = [round(a, 1) for a in fr.angles] if getattr(fr, 'sloped', False) else []
+        # perfil para dibujar el alzado con su pendiente: [(s, h, Z)] en cm desde el inicio de la cadena, y la
+        # distancia del eje del modelo (y = 0) a la linea del perfil
+        model.profile = None
+        if getattr(fr, 'sloped', False) and fr.prof:
+            s_min = info['s_min']
+            model.profile = [((q[4] - s_min) * R.FT, q[0] * R.FT, q[1] * R.FT) for q in fr.seg] + \
+                [((fr.seg[-1][4] + fr.seg[-1][5] - s_min) * R.FT, fr.prof[-1][0] * R.FT, fr.prof[-1][1] * R.FT)]
+            model.profile_off = (info['z_c'] - fr.zref) * R.FT
         ctx = {
             'model': model,
             'bar_types': self.bar_types,
