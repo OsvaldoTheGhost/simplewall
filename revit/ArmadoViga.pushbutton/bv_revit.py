@@ -1287,8 +1287,12 @@ class Builder(object):
         best = None
         for h0, h1, el in self.hosts:
             ov = min(b, h1) - max(a, h0)
-            dist = 0.0 if ov > 0 else min(abs(a - h1), abs(b - h0))
-            key = (-ov if ov > 0 else 1e6 + dist)
+            if ov > 0:
+                key = -ov
+            elif h0 - 1e-9 <= a <= h1 + 1e-9 and h0 - 1e-9 <= b <= h1 + 1e-9:
+                key = 0.0                         # una sola posicion dentro de esta viga
+            else:
+                key = 1e6 + min(abs(a - h1), abs(b - h0))
             if best is None or key < best[0]:
                 best = (key, el)
         return best[1]
@@ -1501,6 +1505,15 @@ class Builder(object):
     def _layout_spacing(self, rb, n, sp_cm, expect_last, axis, run=0):
         tot = sp_cm * (int(n) - 1)
         s_at = (expect_last - tot) if axis == 's' else 0.0
+        if self.fr.prof and axis == 's':
+            # viga con pendiente / cambio de pendiente: distribucion directa con la API de Revit, del lado de la
+            # direccion real del tramo donde esta el conjunto
+            disp = self._axis_disp(tot, axis, run, s_at)
+            acc = rb.GetShapeDrivenAccessor()
+            nrm = acc.Normal
+            side = (disp.X * nrm.X + disp.Y * nrm.Y + disp.Z * nrm.Z) >= 0.0
+            acc.SetLayoutAsNumberWithSpacing(int(n), sp_cm / FT, side, True, True)
+            return True
         r = AR.set_layout(self.doc, rb, n, sp_cm / FT, self._axis_disp(tot, axis, run, s_at), True)
         if r == AR.UNVERIFIED:
             self.rep['notes'].append(u'No se pudo verificar el sentido de un conjunto de estribos; revíselo.')
