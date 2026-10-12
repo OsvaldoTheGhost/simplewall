@@ -404,14 +404,16 @@ class Frame(object):
         q = self.seg[self._k_of_pt(h, z)]
         return self.zref + (z - q[1]) * q[2] - (h - q[0]) * q[3]
 
-    def world(self, s, l, z):
-        """Punto del modelo a partir de (s, l, z) del marco (pies)."""
+    def world(self, s, l, z, k=None):
+        """Punto del modelo a partir de (s, l, z) del marco (pies). k: forzar el tramo k del perfil (su recta
+        prolongada, sin quiebre), para una pieza recta que pasa un poco el cambio de pendiente."""
         if not self.prof:
             return XYZ(self.O.X + self.uh.X * s + self.v.X * l, self.O.Y + self.uh.Y * s + self.v.Y * l, z)
         d = z - self.zref
-        k = self._k_of_s(s)
+        forced = k is not None
+        k = max(0, min(int(k), len(self.seg) - 1)) if forced else self._k_of_s(s)
         q = self.seg[k]
-        if k > 0 and abs(s - q[4]) < 1e-6:
+        if not forced and k > 0 and abs(s - q[4]) < 1e-6:
             # en el quiebre: interseccion de las dos caras desplazadas (bisectriz)
             a = self.seg[k - 1]
             nh, nz = -(a[3] + q[3]), a[2] + q[2]
@@ -1226,7 +1228,7 @@ class Builder(object):
         """Posicion s del marco (pies) -> longitud sobre el eje (cm)."""
         return self.axis.to_arc(s) * FT
 
-    def P(self, s, x, y, run=None):
+    def P(self, s, x, y, run=None, seg=None):
         """Punto del modelo: s a lo largo de la cadena, x lateral desde el eje de la viga, y vertical
         (cm). run = None: sigue el eje con sus quiebres; run = k: sobre la recta del run k."""
         fr = self.fr
@@ -1238,7 +1240,7 @@ class Builder(object):
             ll, m = ax.run_l(run, ss), ax.runs[run][2]
         n = ax.normal(m)
         xf = x / FT
-        b = fr.world(ss, ll, self.info['z_c'] + y / FT)
+        b = fr.world(ss, ll, self.info['z_c'] + y / FT, seg)
         return XYZ(b.X + n.X * xf, b.Y + n.Y * xf, b.Z + n.Z * xf)
 
     def local(self, p):
@@ -1314,8 +1316,10 @@ class Builder(object):
         """Puntos de la varilla. En una viga con cambio de pendiente cada tramo recto que pasa un quiebre se
         dobla ahi (vertice en la interseccion de las caras desplazadas): la varilla sigue en su plano."""
         raw = self._bar_pts_raw(b, x, run)
+        seg = b.get('_seg')                    # pieza recta en un tramo del perfil (partida en un quiebre)
         kinks = [self._cm(k) for k in (self.fr.kinks_between(self._ft(min(q[0] for q in raw)),
-                                                             self._ft(max(q[0] for q in raw))))] if self.fr.prof else []
+                                                             self._ft(max(q[0] for q in raw))))] \
+            if (self.fr.prof and seg is None) else []
         out = [raw[0]]
         for q in raw[1:]:
             a = out[-1]
@@ -1324,7 +1328,7 @@ class Builder(object):
                 for k in sorted(ks, reverse=q[0] < a[0]):
                     out.append((k, q[1], q[2]))
             out.append(q)
-        return [self.P(s_, xx, yy, run) for s_, xx, yy in out]
+        return [self.P(s_, xx, yy, run, seg) for s_, xx, yy in out]
 
     def _bar_pts_raw(self, b, x, run=0):
         """(s, x, y) en cm de los vertices de la varilla."""
@@ -1383,21 +1387,77 @@ class Builder(object):
         # barra central con gancho horizontal, traslape desfasado en horizontal o doblez en planta: plano
         # horizontal y cada varilla por separado (los ganchos de los dos lados son simetricos, no una copia)
         flat = bool(b.get('off_x')) or any(v > 0.01 for v in (b.get('hin') or ())) or run is None
-        norm = self.fr.up(self._ft((b['s0'] + b['s1']) / 2.0)) if flat else self.axis.normal(self.axis.runs[run][2])
+        # cambio de pendiente: una varilla en el plano "horizontal" de la viga (gancho horizontal de la barra
+        # central, desfase horizontal) no puede pasar el quiebre (no seria plana): se parte ahi con traslape
+        kinks = self.fr.kinks_between(self._ft(b['s0']), self._ft(b['s1'])) if self.fr.prof else []
+        if kinks and flat and not b.get('_kink_split'):
+            self._split_at_kinks(b, kinks, u'tiene gancho o desfase horizontal')
+            return
+        if flat:
+            norm = self.fr.normal_at(b['_seg']) if b.get('_seg') is not None else \
+                self.fr.up(self._ft((b['s0'] + b['s1']) / 2.0))
+        else:
+            norm = self.axis.normal(self.axis.runs[run][2])
         xs = sorted(b['xs'])
         n = len(xs)
-        if n > 1 and G.is_uniform(xs) and not flat:
-            rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, xs[0], run),
-                         RIGHT, RIGHT)
-            self._layout_fixed(rb, n, (xs[-1] - xs[0]), xs[-1], 'x', run)
-            self.tag(rb, b['kind'])
-            self.rep['count'][b['kind']] += n
-            return
-        for x in xs:
-            rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, x, run),
-                         RIGHT, RIGHT)
-            self.tag(rb, b['kind'])
-            self.rep['count'][b['kind']] += 1
+        done = []
+        try:
+            if n > 1 and G.is_uniform(xs) and not flat:
+                rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, xs[0], run),
+                             RIGHT, RIGHT)
+                self._layout_fixed(rb, n, (xs[-1] - xs[0]), xs[-1], 'x', run)
+                self.tag(rb, b['kind'])
+                self.rep['count'][b['kind']] += n
+                return
+            for x in xs:
+                rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, x, run),
+                             RIGHT, RIGHT)
+                done.append(rb)
+                self.tag(rb, b['kind'])
+                self.rep['count'][b['kind']] += 1
+        except Exception:
+            if not kinks or b.get('_kink_split'):
+                raise
+            # respaldo: Revit no acepto la varilla doblada en el quiebre; se arma en piezas con traslape
+            for rb in done:
+                try:
+                    self.created.remove(rb)
+                    self.rep['count'][b['kind']] -= 1
+                    doc.Delete(rb.Id)
+                except Exception:
+                    pass
+            self._split_at_kinks(b, kinks, u'Revit no aceptó el doblez')
+
+    def _split_at_kinks(self, b, kinks, why):
+        """Parte la varilla en los cambios de pendiente con un traslape centrado en cada quiebre."""
+        lc = self.cfg.get('lap') or {}
+        lap = float(lc.get('k', 40.0)) * b['bt']['dn']
+        ks = sorted(self._cm(k) for k in kinks)
+        cuts = [(b['s0'], None)] + [(k, k) for k in ks] + [(b['s1'], None)]
+        pieces = []
+        for i in range(len(cuts) - 1):
+            a = b['s0'] if i == 0 else cuts[i][0] - lap / 2.0
+            e = b['s1'] if i == len(cuts) - 2 else cuts[i + 1][0] + lap / 2.0
+            pieces.append((max(a, b['s0']), min(e, b['s1'])))
+        hin = b.get('hin') or (0.0, 0.0)
+        bounds = [b['s0']] + ks + [b['s1']]
+        for i, (a, e) in enumerate(pieces):
+            q = dict(b)
+            q['_kink_split'] = True
+            # recta en el tramo de perfil de su parte central; pasa el quiebre recta medio traslape
+            q['_seg'] = self.fr._k_of_s(self._ft((bounds[i] + bounds[i + 1]) / 2.0))
+            q['s0'], q['s1'] = a, e
+            q['leg0'] = b['leg0'] if i == 0 else 0.0
+            q['leg1'] = b['leg1'] if i == len(pieces) - 1 else 0.0
+            if b.get('hin'):
+                q['hin'] = (hin[0] if i == 0 else 0.0, hin[1] if i == len(pieces) - 1 else 0.0)
+            ck = b.get('crank')
+            q['crank'] = ck if (ck and a < ck[0] < e) else None
+            self.make_long(q)
+        note = (u'%s: %s y pasa un cambio de pendiente; se partió en el quiebre con traslape de %.0f cm'
+                % (b['label'], why, lap))
+        if note not in self.rep['notes']:
+            self.rep['notes'].append(note)
 
     def _axis_disp(self, total, axis, run=0, s_at=0.0):
         # en una viga con cambio de pendiente la direccion depende de donde esta el conjunto (s_at)
