@@ -17,6 +17,10 @@ try:
     from Autodesk.Revit.DB import BooleanOperationsUtils, BooleanOperationsType, Plane
 except Exception:            # pragma: no cover
     BooleanOperationsUtils = BooleanOperationsType = Plane = None
+try:
+    from Autodesk.Revit.DB.Architecture import Stairs
+except Exception:            # pragma: no cover
+    Stairs = None
 
 import es_geom as G
 import armado_rebar as AR
@@ -238,21 +242,29 @@ def _face_loops(face):
     return loops
 
 
-def _profile_by_cut(sols, fr, w_mid):
-    if BooleanOperationsUtils is None:
-        return None
+def _union(sols):
+    """Une los solidos (p. ej. tramo + descanso) para cortarlos como una sola pieza."""
+    if BooleanOperationsUtils is None or not sols:
+        return list(sols)
     solids = [sols[0]]
     for so in sols[1:]:
         try:
             solids[0] = BooleanOperationsUtils.ExecuteBooleanOperation(solids[0], so, BooleanOperationsType.Union)
         except Exception:
             solids.append(so)
-    origin = XYZ(fr.uy.X * w_mid, fr.uy.Y * w_mid, 0.0)
+    return solids
+
+
+def _profile_by_cut(solids, fr, w):
+    """Perfil (s, z) del corte de los solidos con el plano vertical a la abscisa 'w' (pies) a lo ancho."""
+    if BooleanOperationsUtils is None:
+        return None
+    origin = XYZ(fr.uy.X * w, fr.uy.Y * w, 0.0)
     try:
         plane = Plane.CreateByNormalAndOrigin(fr.uy, origin)
     except Exception:
         return None
-    best = None
+    loops = []
     for so in solids:
         try:
             half = BooleanOperationsUtils.CutWithHalfSpace(so, plane)
@@ -268,10 +280,32 @@ def _profile_by_cut(sols, fr, w_mid):
                 continue
             for lp in _face_loops(f):
                 prof = [(fr.local(p)[0], fr.local(p)[2]) for p in lp]
-                a = abs(G.signed_area(prof))
-                if best is None or a > best[0]:
-                    best = (a, prof)
-    return best[1] if best else None
+                loops.append((abs(G.signed_area(prof)), prof))
+    if not loops:
+        return None
+    return max(loops, key=lambda q: q[0])[1]
+
+
+def _best_cut(solids, fr, w0, w1):
+    """Corta en varias posiciones a lo ancho y se queda con el perfil de mayor area.
+
+    Un corte solo a la mitad del ancho falla en escaleras en U / L modeladas como un unico
+    solido: el plano medio pasa por el hueco entre tramos y solo corta el descanso.
+    Devuelve (perfil, aviso)."""
+    found = []
+    for k in (0.5, 0.25, 0.75, 0.15, 0.85):
+        prof = _profile_by_cut(solids, fr, w0 + (w1 - w0) * k)
+        if prof:
+            found.append((abs(G.signed_area(prof)), prof))
+    if not found:
+        return None, None
+    amax = max(a for a, _ in found)
+    amin = min(a for a, _ in found)
+    warn = None
+    if amin < 0.8 * amax:
+        warn = (u'La sección longitudinal no es la misma en todo el ancho (¿escalera en U/L modelada como un '
+                u'solo sólido?): se usó el corte de mayor sección. Verifique o modele cada tramo por separado.')
+    return max(found, key=lambda q: q[0])[1], warn
 
 
 def _profile_by_face(sols, fr):
@@ -291,35 +325,80 @@ def _profile_by_face(sols, fr):
     return best[1] if best else None
 
 
-def analyze(doc, el, rot=0, _flip=False):
-    """Devuelve (info, None) o (None, error)."""
-    try:
-        if not RebarHostData.IsValidHost(el):
-            return None, HOST_ADVICE
-    except Exception:
-        pass
-    sols = _get_solids(el)
-    if not sols:
-        return None, u'el elemento no tiene geometría sólida'
+def _bbox(sols):
     pts = _points(sols)
     if not pts:
+        return None
+    return (min(p.X for p in pts), min(p.Y for p in pts), min(p.Z for p in pts),
+            max(p.X for p in pts), max(p.Y for p in pts), max(p.Z for p in pts))
+
+
+def _touch(a, b, tol=0.1):
+    return a is not None and b is not None and all(a[i] <= b[i + 3] + tol and b[i] <= a[i + 3] + tol
+                                                   for i in range(3))
+
+
+def stair_parts(doc, el):
+    """Escaleras de Revit (Stairs) con varios tramos/descansos: una 'parte' por tramo y por descanso.
+
+    Cada tramo se arma en su propio sistema (direccion de subida y ancho del tramo) e incluye los
+    descansos que lo tocan; cada descanso se puede armar tambien como losa plana (en dos direcciones).
+    Devuelve [] si el elemento no es una escalera compuesta (se usa el elemento completo)."""
+    if Stairs is None or not isinstance(el, Stairs):
+        return []
+    try:
+        runs = [doc.GetElement(i) for i in el.GetStairsRuns()]
+        lands = [doc.GetElement(i) for i in el.GetStairsLandings()]
+    except Exception:
+        return []
+    runs = [(r, _get_solids(r)) for r in runs if r is not None]
+    runs = [(r, s) for r, s in runs if s]
+    lands = [(l, _get_solids(l)) for l in lands if l is not None]
+    lands = [(l, s) for l, s in lands if s]
+    if len(runs) <= 1 and not lands:
+        return []
+    runs.sort(key=lambda q: _bbox(q[1])[2])
+    lands.sort(key=lambda q: _bbox(q[1])[2])
+    lbb = [_bbox(s) for _, s in lands]
+    parts = []
+    for k, (r, rs) in enumerate(runs):
+        rbb = _bbox(rs)
+        adj = [lands[j][1] for j in range(len(lands)) if _touch(rbb, lbb[j])]
+        extra = sum(adj, [])
+        parts.append({'label': (u'Tramo %d%s' % (k + 1, u' + descanso' if adj else u''),
+                                u'Run %d%s' % (k + 1, u' + landing' if adj else u'')),
+                      'sols': rs + extra, 'wsols': rs, 'rot90': 0, 'tag': u'%s|T%d' % (TAG, k + 1)})
+    for k, (l, ls) in enumerate(lands):
+        for r90 in (0, 1):
+            parts.append({'label': (u'Descanso %d (losa)%s' % (k + 1, u' girado 90°' if r90 else u''),
+                                    u'Landing %d (slab)%s' % (k + 1, u' rotated 90°' if r90 else u'')),
+                          'sols': ls, 'wsols': ls, 'rot90': r90, 'tag': u'%s|D%d' % (TAG, k + 1)})
+    return parts
+
+
+def _analyze_solids(doc, el, sols, wsols, rot=0, _flip=False):
+    """sols: solidos del perfil; wsols: solidos que definen subida y ancho (el tramo)."""
+    pts = _points(sols)
+    wpts = _points(wsols)
+    if not pts or not wpts:
         return None, u'sin geometría'
-    u = _run_dir(sols, pts)
+    u = _run_dir(wsols, wpts)
     if rot:
         u = XYZ(-u.Y, u.X, 0.0)
     if _flip:
         u = XYZ(-u.X, -u.Y, 0.0)
     fr = Frame(u, XYZ(-u.Y, u.X, 0.0))
     ab = [fr.ab(p) for p in pts]
+    wab = [fr.ab(p) for p in wpts]
     fr.ox = min(q[0] for q in ab)
-    fr.oy = min(q[1] for q in ab)
+    fr.oy = min(q[1] for q in wab)
     fr.z0 = min(p.Z for p in pts)
-    w_max = max(q[1] for q in ab)
+    w_max = max(q[1] for q in wab)
     W = (w_max - fr.oy) * FT
     if W < 10.0:
         return None, u'ancho insuficiente'
     source = 'cut'
-    prof = _profile_by_cut(sols, fr, (fr.oy + w_max) / 2.0)
+    prof, warn = _best_cut(_union(sols), fr, fr.oy, w_max)
     if not prof:
         source = 'face'
         prof = _profile_by_face(sols, fr)
@@ -329,15 +408,48 @@ def analyze(doc, el, rot=0, _flip=False):
         model = G.StairModel(prof, round(W, 1), _mark(el))
     except Exception as ex:
         return None, u'perfil no válido (%s)' % ex
+    # el modelo se traslada para empezar en (0, 0): el sistema local debe seguirlo
+    fr.ox += model.shift[0] / FT
+    fr.z0 += model.shift[1] / FT
     # la subida debe ir hacia +x
     L = model.length
     left = [p[1] for p in model.poly if p[0] < L / 3.0]
     right = [p[1] for p in model.poly if p[0] > 2.0 * L / 3.0]
     if left and right and max(left) > max(right) + 1.0 and not _flip:
-        return analyze(doc, el, rot, True)
+        return _analyze_solids(doc, el, sols, wsols, rot, True)
     info = {'elem': el, 'model': model, 'frame': fr, 'mark': _mark(el), 'type_name': _type_name(doc, el),
-            'id': eid_int(el.Id), 'source': source, 'rot': rot}
+            'id': eid_int(el.Id), 'source': source, 'rot': rot, 'warn': warn, 'tag': TAG,
+            'part': None, 'part_items': None}
     return info, None
+
+
+def analyze(doc, el, rot=0):
+    """Devuelve (info, None) o (None, error).
+
+    rot: en un elemento simple, 0 = subida automatica y 1 = girada 90 grados; en una escalera de
+    varios tramos es el indice de la parte (tramo o descanso) a armar."""
+    try:
+        if not RebarHostData.IsValidHost(el):
+            return None, HOST_ADVICE
+    except Exception:
+        pass
+    parts = stair_parts(doc, el)
+    if parts:
+        idx = max(0, min(int(rot or 0), len(parts) - 1))
+        p = parts[idx]
+        info, err = _analyze_solids(doc, el, p['sols'], p['wsols'], p['rot90'])
+        if info is None:
+            return None, u'%s: %s' % (p['label'][0], err)
+        info['rot'] = idx
+        info['tag'] = p['tag']
+        info['part'] = p['label']
+        info['part_items'] = [q['label'] for q in parts]
+        info['warn'] = None          # cada tramo tiene su propio ancho: el aviso del corte no aplica
+        return info, None
+    sols = _get_solids(el)
+    if not sols:
+        return None, u'el elemento no tiene geometría sólida'
+    return _analyze_solids(doc, el, sols, sols, 1 if rot else 0)
 
 
 def describe(info):
@@ -347,8 +459,13 @@ def describe(info):
                                                                 G.fmt(m.throat()))]
     if len(m.noses) >= 2:
         parts.append(u'%d escalones (huella %s, peralte %s)' % (len(m.noses), G.fmt(m.tread), G.fmt(m.riser)))
+    if info.get('part'):
+        parts.insert(1, u'Armando: %s (de %d partes; cambie en «Tramo / dirección»)'
+                     % (info['part'][0], len(info['part_items'])))
     if info.get('source') == 'face':
         parts.append(u'perfil tomado de la cara lateral')
+    if info.get('warn'):
+        parts.append(u'Aviso: ' + info['warn'])
     return u'\n'.join(parts)
 
 
@@ -383,13 +500,14 @@ class Builder(object):
         self.bt_elems = bt_elems
         self.rep = rep
         self.host = info['elem']
+        self.tagstr = info.get('tag') or TAG
         self.created = []
 
     def tag(self, rb, count, kind):
         try:
             p = rb.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
             if p is not None and not p.IsReadOnly:
-                p.Set(TAG)
+                p.Set(self.tagstr)
         except Exception:
             pass
         part = self.cfg.get('partition')
@@ -410,7 +528,9 @@ class Builder(object):
             for rb in RebarHostData.GetRebarHostData(self.host).GetRebarsInHost():
                 p = rb.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
                 s = p.AsString() if p is not None else None
-                if s and s.startswith(TAG):
+                # solo la parte que se arma (cada tramo/descanso lleva su marca) y el armado antiguo
+                # sin parte (TAG), creado por versiones anteriores sobre el elemento completo
+                if s and (s == self.tagstr or s == TAG):
                     ids.Add(rb.Id)
         except Exception:
             pass

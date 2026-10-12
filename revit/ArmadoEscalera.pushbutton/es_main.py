@@ -68,34 +68,49 @@ class Session(object):
         self.doc = doc
         self.el = None
         self.info = None
+        self.ctx = None
+        self.nsel = 1
         self.bar_types = R.get_bar_types(doc)
 
-    def load(self, el, nsel=1):
-        info, err = R.analyze(self.doc, el, 0)
+    def load(self, el, nsel=1, rot=0):
+        info, err = R.analyze(self.doc, el, rot)
+        if info is None and rot:
+            info, err = R.analyze(self.doc, el, 0)
         if info is None:
             return None, u'No se puede armar: %s' % err
         self.el = el
         self.info = info
-        desc = R.describe(info)
-        if nsel > 1:
-            desc += u'\nAviso: se seleccionaron %d elementos; se arma solo el primero.' % nsel
-        ctx = {'model': info['model'], 'bar_types': self.bar_types, 'desc': desc,
-               'rebuild': self._rebuild_now, 'rotate': self.rotate}
+        self.nsel = nsel
+        ctx = {'model': info['model'], 'bar_types': self.bar_types, 'desc': self._desc(),
+               'rebuild': self._rebuild_now, 'rotate': self.rotate,
+               'rot': info['rot'], 'rot_items': info.get('part_items')}
+        self.ctx = ctx
         return ctx, None
+
+    def _desc(self):
+        desc = R.describe(self.info)
+        if getattr(self, 'nsel', 1) > 1:
+            desc += u'\nAviso: se seleccionaron %d elementos; se arma solo el primero.' % self.nsel
+        return desc
 
     def _rebuild_now(self, rot):
         inf, e = R.analyze(self.doc, self.el, rot)
         if inf is None:
             raise ML.UserError(e)
         self.info = inf
+        ctx = getattr(self, 'ctx', None)
+        if ctx is not None:                 # la ventana comparte este diccionario
+            ctx['model'] = inf['model']
+            ctx['rot'] = inf['rot']
+            ctx['desc'] = self._desc()
         return inf['model']
 
     def rotate(self, uiapp, rot):
         ML.check_doc(uiapp, self.doc)
         return self._rebuild_now(rot)
 
-    def _ctx_or_raise(self, el):
-        ctx, err = self.load(el)
+    def _ctx_or_raise(self, el, rot=0):
+        ctx, err = self.load(el, 1, rot)
         if ctx is None:
             raise ML.UserError(err)
         return ctx
@@ -111,7 +126,8 @@ class Session(object):
         els = ML.refetch(self.doc, [self.el])
         if not els:
             raise ML.UserError(u'El elemento ya no existe en el modelo.')
-        return self._ctx_or_raise(els[0])
+        # se conserva el tramo / la direccion elegidos
+        return self._ctx_or_raise(els[0], self.info['rot'] if self.info else 0)
 
     def apply(self, uiapp, result):
         ud = ML.check_doc(uiapp, self.doc)

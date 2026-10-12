@@ -27,7 +27,7 @@ TEXTS = {
     'title': (u'ARMADO DE ESCALERA / RAMPA', u'STAIR / RAMP REINFORCEMENT'),
     'tab_gen': (u'General', u'General'), 'tab_long': (u'Longitudinal', u'Longitudinal'),
     'tab_tr': (u'Transversal', u'Transverse'), 'tab_steps': (u'Escalones', u'Steps'),
-    'kind': (u'Tipo', u'Type'), 'rot': (u'Dirección', u'Direction'),
+    'kind': (u'Tipo', u'Type'), 'rot': (u'Tramo / dirección', u'Run / direction'),
     'cov_b': (u'Recubrimiento inferior', u'Bottom cover'), 'cov_t': (u'superior', u'top'),
     'cov_s': (u'Recubrimiento lateral y de extremos', u'Side and end cover'), 'partition': (u'Partición', u'Partition'),
     'replace': (u'Reemplazar el armado creado antes con esta herramienta', u'Replace rebar previously created by this tool'),
@@ -62,8 +62,12 @@ TIPS = {
     'tbBotExt0': (u'Prolongación recta más allá del extremo (hacia el apoyo). 0 = termina con recubrimiento.',
                   u'Straight extension beyond the end (into the support). 0 = ends at cover.'),
     'tbBotLeg0': (u'Pata a 90° hacia el lecho opuesto (se limita al espesor).', u'90° leg towards the opposite layer (limited to thickness).'),
-    'cbRot': (u'Automática: la subida se detecta de la cara inclinada. Girada: usa la dirección perpendicular.',
-              u'Automatic: rise detected from the sloped face. Rotated: uses the perpendicular direction.'),
+    'cbRot': (u'Elemento simple: Automática detecta la subida de la cara inclinada; Girada usa la dirección '
+              u'perpendicular. Escalera de varios tramos (en U / L): elija el tramo (con su descanso) o el descanso '
+              u'a armar; cada uno se arma en su propia dirección y ancho.',
+              u'Single element: Automatic detects the rise from the sloped face; Rotated uses the perpendicular '
+              u'direction. Multi-run stairs (U / L): pick the run (with its landing) or the landing to reinforce; '
+              u'each one uses its own direction and width.'),
     'btnSave': (u'Guardar esta configuración con un nombre', u'Save these settings with a name'),
     'btnImport': (u'Cargar una configuración guardada', u'Load saved settings'),
 }
@@ -232,6 +236,7 @@ class StairRebarWindow(forms.WPFWindow):
         self.res = None
         self.result = None
         self.cfg = G.fit_cfg(ctx.get('cfg') or {}, self.model, self.bl)
+        self.cfg['rot'] = int(ctx.get('rot', 0) or 0)
         self._init_controls()
         self._wire()
         ML.setup(self)
@@ -298,7 +303,9 @@ class StairRebarWindow(forms.WPFWindow):
         self._mute = True
         c = self.cfg
         self._cb_fill(self.cbKind, [self.T('k_esc'), self.T('k_ramp')], 1 if c.get('kind') == 'rampa' else 0)
-        self._cb_fill(self.cbRot, [self.T('r_auto'), self.T('r_90')], 1 if int(c.get('rot', 0)) == 1 else 0)
+        items = self.ctx.get('rot_items')
+        items = [it[self.lang] for it in items] if items else [self.T('r_auto'), self.T('r_90')]
+        self._cb_fill(self.cbRot, items, max(0, min(int(c.get('rot', 0) or 0), len(items) - 1)))
         self._cb_fill(self.cbTopMode, [self.T('m_full'), self.T('m_ends')], 1 if c['top'].get('mode') == 'ends' else 0)
         self._cb_fill(self.cbLapStyle, G.LP.style_items(self.lang), G.LP.STYLES.index(G.LP.lap_style(c['lap'])))
         self._mute = m
@@ -515,7 +522,7 @@ class StairRebarWindow(forms.WPFWindow):
     def _on_rot(self, s, a):
         if self._mute or not self._ready:
             return
-        rot = 1 if self.cbRot.SelectedIndex == 1 else 0
+        rot = max(0, self.cbRot.SelectedIndex)
         host = ML.host_of(self)
         if host is not None and self.ctx.get('rotate') is not None:
             # no modal: la geometria se relee en Revit con ExternalEvent
@@ -840,7 +847,7 @@ class StairRebarWindow(forms.WPFWindow):
         self.ctx = ctx
         self.model = ctx['model']
         cfg = G.fit_cfg(self.cfg, self.model, self.bl)
-        cfg['rot'] = 0
+        cfg['rot'] = int(ctx.get('rot', 0) or 0)
         cfg['kind'] = self.model.guess_kind()
         self.cfg = cfg
         self._mute = True
