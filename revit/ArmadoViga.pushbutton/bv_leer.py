@@ -135,6 +135,39 @@ def _positions(rb):
     return out or [0]
 
 
+def _bars(rb, poss):
+    """Puntos de la linea central de cada posicion del conjunto: {indice: [XYZ]}.
+
+    La posicion de cada barra se obtiene con su transformada respecto a la primera
+    (GetBarPositionTransform): GetCenterlineCurves puede devolver la misma barra para todas las
+    posiciones, y entonces la separacion de estribos y la posicion de las varillas salian en cero."""
+    base = _pts(_curves(rb, 0))
+    out = {}
+    if len(base) < 2:
+        return out
+    try:
+        acc = rb.GetShapeDrivenAccessor()
+        inv0 = acc.GetBarPositionTransform(0).Inverse
+        for i in poss:
+            T = acc.GetBarPositionTransform(i).Multiply(inv0)
+            out[i] = [T.OfPoint(p) for p in base]
+        return out
+    except Exception:
+        pass
+    for i in poss:                       # armadura de forma libre: curvas de cada posicion
+        pts = base if i == 0 else _pts(_curves(rb, i))
+        if len(pts) >= 2:
+            out[i] = pts
+    return out
+
+
+def _kind(comment):
+    """Funcion guardada en el comentario por esta herramienta (ArmadoViga|top_main, ...) o None."""
+    if comment.startswith(R.TAG + u'|'):
+        return comment.split(u'|', 1)[1].strip() or None
+    return None
+
+
 def _is_stirrup(doc, rb):
     try:
         sh = doc.GetElement(rb.GetShapeId())
@@ -204,8 +237,10 @@ def read_existing(doc, info):
         return None
     longs, stirrups, own = [], [], set()
     for rb in rebars:
-        if _comment(rb).startswith(R.TAG):
+        com = _comment(rb)
+        if com.startswith(R.TAG):
             own.add(R.eid_int(rb.Id))
+        kind = _kind(com)
         bt = doc.GetElement(rb.GetTypeId())
         bname = R.el_name(bt) if bt is not None else u'?'
         try:
@@ -218,31 +253,32 @@ def read_existing(doc, info):
             host_id = None
         z0, z1 = ctx.zrange(host_id)
         poss = _positions(rb)
-        first = _pts(_curves(rb, poss[0]))
-        if len(first) < 2:
+        bars = _bars(rb, poss)
+        if not bars:
             continue
+        first = bars[min(bars)]
         ss = [ctx.s_cm(p) for p in first]
-        st = _is_stirrup(doc, rb)
-        if st is None:
-            st = max(ss) - min(ss) < 0.5 * (z1 - z0) * FT
+        if kind is not None:
+            st = kind == 'stirrups'
+        else:
+            st = _is_stirrup(doc, rb)
+            if st is None:
+                st = max(ss) - min(ss) < 0.5 * (z1 - z0) * FT
         if st:
-            last = _pts(_curves(rb, poss[-1])) if len(poss) > 1 else first
-            s_a = sum(ss) / len(ss)
-            s_b = sum(ctx.s_cm(p) for p in last) / max(len(last), 1)
+            cs = sorted(sum(ctx.s_cm(p) for p in pts) / len(pts) for pts in bars.values())
             try:
                 n = int(rb.Quantity)
             except Exception:
-                n = len(poss)
+                n = len(cs)
+            n = max(n, 1)
             ls = [ctx.l_cm(p) for p in first]
             zs = [p.Z * FT for p in first]
-            stirrups.append({'bt': bname, 'dm': dm, 'n': n, 's0': min(s_a, s_b), 's1': max(s_a, s_b),
-                             'sp': abs(s_b - s_a) / (n - 1) if n > 1 else 0.0,
+            stirrups.append({'bt': bname, 'dm': dm, 'n': n, 's0': cs[0], 's1': cs[-1],
+                             'sp': (cs[-1] - cs[0]) / (n - 1) if n > 1 else 0.0,
                              'b': max(ls) - min(ls) + dm, 'h': max(zs) - min(zs) + dm})
             continue
-        for i in poss:
-            pts = first if i == poss[0] else _pts(_curves(rb, i))
-            if len(pts) < 2:
-                continue
+        for i in sorted(bars):
+            pts = bars[i]
             ss = [ctx.s_cm(p) for p in pts]
             a, b = min(ss), max(ss)
             # posicion en la seccion: centro del tramo mas largo a lo largo de la viga (sin patas ni ganchos)
@@ -256,8 +292,15 @@ def read_existing(doc, info):
                 leg0, leg1 = l_first, l_last
             else:
                 leg0, leg1 = l_last, l_first
-            longs.append({'bt': bname, 'dm': dm, 'dn': dn,
-                          'layer': 'sup' if rel >= 0.75 else ('inf' if rel <= 0.25 else 'piel'),
+            if kind in ('top_main', 'top_add'):
+                layer = 'sup'
+            elif kind in ('bot_main', 'bot_add'):
+                layer = 'inf'
+            elif kind == 'side':
+                layer = 'piel'
+            else:
+                layer = 'sup' if rel >= 0.75 else ('inf' if rel <= 0.25 else 'piel')
+            longs.append({'bt': bname, 'dm': dm, 'dn': dn, 'layer': layer, 'kind': kind,
                           'l': (ctx.l_cm(pm[0]) + ctx.l_cm(pm[1])) / 2.0, 'z': zc * FT, 'a': a, 'b': b,
                           'leg0': leg0, 'leg1': leg1})
     return {'rebars': sorted(seen), 'own': own, 'longs': longs, 'stirrups': stirrups}
@@ -273,7 +316,8 @@ def _lines(longs):
         best = None
         for ln in lines:
             q = ln['last']
-            if ln['layer'] != p['layer'] or ln['bt'] != p['bt'] or ln['b'] >= p['b'] - 1.0:
+            if ln['layer'] != p['layer'] or ln['bt'] != p['bt'] or ln['kind'] != p.get('kind') or \
+                    ln['b'] >= p['b'] - 1.0:
                 continue
             if abs(q['l'] - p['l']) > tol or abs(q['z'] - p['z']) > tol or p['a'] > ln['b'] + JOIN_TOL:
                 continue
@@ -285,12 +329,26 @@ def _lines(longs):
             ln['b'] = p['b']
             ln['leg1'] = p['leg1']
             ln['pieces'] += 1
+            ln['items'].append(p)
             ln['last'] = p
         else:
-            lines.append({'layer': p['layer'], 'bt': p['bt'], 'dm': p['dm'], 'dn': p['dn'], 'a': p['a'],
-                          'b': p['b'], 'leg0': p['leg0'], 'leg1': p['leg1'], 'pieces': 1, 'last': p,
+            lines.append({'layer': p['layer'], 'bt': p['bt'], 'kind': p.get('kind'), 'dm': p['dm'], 'dn': p['dn'],
+                          'a': p['a'],
+                          'b': p['b'], 'leg0': p['leg0'], 'leg1': p['leg1'], 'pieces': 1, 'last': p, 'items': [p],
                           'z': p['z']})
     return lines
+
+
+def _slots(pieces):
+    """Numero de posiciones distintas a lo ancho (las piezas a menos de 1.6 diametros son la misma)."""
+    ls = sorted(x['l'] for x in pieces)
+    n = 0
+    prev = None
+    for x, l in zip(sorted(pieces, key=lambda q: q['l']), ls):
+        if prev is None or l - prev > max(2.0, 1.6 * x['dm']):
+            n += 1
+        prev = l
+    return n
 
 
 def _median(v, default=0.0):
@@ -388,7 +446,10 @@ def to_cfg(ex, model, bts_list):
     n0, n1 = nodes[0], nodes[-1]
     lo_end = n0.s1 + END_TOL if not n0.free else END_TOL
     hi_end = n1.s0 - END_TOL if not n1.free else model.L - END_TOL
-    full = [ln for ln in lines if ln['a'] <= lo_end and ln['b'] >= hi_end]
+    MAIN = ('top_main', 'bot_main')
+    # funcion conocida (marcada al crearla): manda sobre la geometria; si no, de extremo a extremo = corrido
+    full = [ln for ln in lines if ln['kind'] in MAIN or
+            (ln['kind'] is None and ln['a'] <= lo_end and ln['b'] >= hi_end)]
     part = [ln for ln in lines if ln not in full]
     for lay, key in (('sup', 'top'), ('inf', 'bot')):
         fl = [ln for ln in full if ln['layer'] == lay]
@@ -400,25 +461,30 @@ def to_cfg(ex, model, bts_list):
         bt = _most([ln['bt'] for ln in fl])
         sel = [ln for ln in fl if ln['bt'] == bt]
         c['bt'] = bt if bt in have else c['bt']
-        c['n'] = len(sel)
-        c['La'] = _r(_median([ln['leg0'] for ln in sel]))
-        c['Lb'] = _r(_median([ln['leg1'] for ln in sel]))
+        # cantidad: posiciones distintas en la seccion (las piezas de un traslape, aunque no se hayan unido
+        # en una linea o esten desfasadas un diametro, son la misma varilla)
+        pcs = [x for ln in sel for x in ln['items']]
+        c['n'] = _slots(pcs) or len(sel)
+        a0 = min(x['a'] for x in pcs) if pcs else 0.0
+        b1 = max(x['b'] for x in pcs) if pcs else 0.0
+        c['La'] = _r(_median([x['leg0'] for x in pcs if x['a'] <= a0 + 5.0]))
+        c['Lb'] = _r(_median([x['leg1'] for x in pcs if x['b'] >= b1 - 5.0]))
         c['Lna'] = c['Lnb'] = 0.0
         others = [ln for ln in fl if ln['bt'] != bt]
         if others:
             notes.append(u'Corridos %s: también hay %s; se cargaron como %d %s'
                          % (u'superiores' if lay == 'sup' else u'inferiores',
-                            u', '.join(u'%d %s' % (sum(1 for x in others if x['bt'] == n), n)
-                                       for n in sorted(set(x['bt'] for x in others))), len(sel), bt))
-        laps = max(ln['pieces'] for ln in sel) - 1
-        if laps > 0:
+                            u', '.join(u'%d %s' % (_slots([x for ln in others if ln['bt'] == n
+                                                            for x in ln['items']]), n)
+                                       for n in sorted(set(x['bt'] for x in others))), c['n'], bt))
+        if len(pcs) > c['n']:
             notes.append(u'Corridos %s con traslapes: se recalculan con la longitud comercial / posiciones '
                          u'de Configuración' % (u'superiores' if lay == 'sup' else u'inferiores'))
     # ---- bastones
     for lay, key in (('sup', 'top_add'), ('inf', 'bot_add')):
         add = G.add_default(model)
         groups = {}
-        for ln in [x for x in part if x['layer'] == lay]:
+        for ln in [x for x in part if x['layer'] == lay and x['kind'] in (None, key)]:
             a, b = ln['a'], ln['b']
             if a <= lo_end:
                 k = ('start', 0)

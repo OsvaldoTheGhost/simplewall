@@ -1079,11 +1079,13 @@ class Builder(object):
                 best = (key, el)
         return best[1]
 
-    def tag(self, rb):
+    def tag(self, rb, kind=None):
+        # la funcion de la varilla (top_main, bot_add, side, stirrups...) queda en el comentario: al leer el
+        # armado de la viga se sabe que es cada pieza sin adivinarlo por su geometria
         try:
             p = rb.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
             if p is not None and not p.IsReadOnly:
-                p.Set(TAG)
+                p.Set(TAG + (u'|' + kind if kind else u''))
         except Exception:
             pass
         part = self.cfg.get('partition')
@@ -1176,13 +1178,13 @@ class Builder(object):
             rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, xs[0], run),
                          RIGHT, RIGHT)
             self._layout_fixed(rb, n, (xs[-1] - xs[0]), xs[-1], 'x', run)
-            self.tag(rb)
+            self.tag(rb, b['kind'])
             self.rep['count'][b['kind']] += n
             return
         for x in xs:
             rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, x, run),
                          RIGHT, RIGHT)
-            self.tag(rb)
+            self.tag(rb, b['kind'])
             self.rep['count'][b['kind']] += 1
 
     def _axis_disp(self, total, axis, run=0):
@@ -1237,7 +1239,7 @@ class Builder(object):
                                          u'estribos; revíselos visualmente.')
         if st['n'] > 1 and st['sp'] > 0:
             self._layout_spacing(rb, st['n'], st['sp'], s_last, 's', run)
-        self.tag(rb)
+        self.tag(rb, 'stirrups')
         self.rep['count']['stirrups'] += int(st['n'])
 
     def _stir_ok(self, rb, poly):

@@ -99,6 +99,7 @@ TEXTS = {
     'first_hint': (u'(desde el paño del apoyo)', u'(from the support face)'),
     'save': (u'Guardar', u'Save'),
     'import': (u'Importar', u'Import'),
+    'reset': (u'Nuevo armado', u'New reinforcement'),
 }
 
 TIPS = {
@@ -204,6 +205,11 @@ TIPS = {
     'btnSave': (u'Guardar esta configuración con un nombre para reutilizarla',
                 u'Save these settings with a name to reuse them'),
     'btnImport': (u'Cargar una configuración guardada', u'Load saved settings'),
+    'btnReset': (u'Borra la configuración cargada (la del armado existente o la capturada) y empieza con los '
+                 u'valores por defecto. El armado del modelo no cambia hasta pulsar OK; con «Reemplazar» se borra '
+                 u'el anterior.',
+                 u'Clears the loaded settings (from the existing rebar or typed in) and starts from the defaults. '
+                 u'The model rebar does not change until OK; with "Replace" the previous one is deleted.'),
 }
 
 DYN = {
@@ -698,6 +704,7 @@ class BeamRebarWindow(forms.WPFWindow):
         self.btnOK.Click += self._on_ok
         self.btnSave.Click += self._on_save
         self.btnImport.Click += self._on_import
+        self.btnReset.Click += self._on_reset
         self.cbLang.SelectionChanged += self._on_lang
         for i in range(6):
             getattr(self, 'nav%d' % i).Checked += self._mk_nav(i)
@@ -1823,6 +1830,34 @@ class BeamRebarWindow(forms.WPFWindow):
             return
         self.result = result
         self.Close()
+
+    # ------------------------------------------------------------ nuevo armado
+    def _default_cfg(self):
+        cfg = G.fit_cfg({}, self.model, self.bts_list)
+        if self.hooks:
+            h = [x for x in self.hooks if abs(x['angle'] - 135.0) < 1.0]
+            cfg['stirrups']['hook'] = (h[0] if h else self.hooks[0])['name']
+        return cfg
+
+    def _on_reset(self, s, a):
+        msg = (u'¿Borrar la configuración actual y empezar un armado nuevo con los valores por defecto?\n\n'
+               u'El armado del modelo no cambia hasta pulsar OK.') if self.lang == 0 else \
+              (u'Clear the current settings and start a new reinforcement from the defaults?\n\n'
+               u'The model rebar does not change until OK.')
+        if not self._confirm(msg):
+            return
+        self.cfg = self._default_cfg()
+        self.cur_span = 0
+        self.cur_loc = {'T': 0, 'B': 0}
+        for p in self.layer_sel:
+            self.layer_sel[p] = -1
+            self.tb_layers[p].sel = -1
+        self._load_all_editors()
+        self._set_span(0)
+        self._refresh_all()
+        self.txtStatus.Text = u'Configuración reiniciada: capture el armado y pulse OK (marque «Reemplazar» para ' \
+                              u'borrar el anterior).' if self.lang == 0 else \
+            u'Settings cleared: enter the reinforcement and press OK (check "Replace" to delete the previous one).'
 
     # ------------------------------------------------------------ no modal
     def reload(self, ctx):
