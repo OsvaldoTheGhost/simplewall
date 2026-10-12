@@ -1,0 +1,9 @@
+title: "Armado\nEscalera"
+tooltip: >-
+  Arma escaleras rectas y rampas / losas inclinadas a partir de su perfil: lecho inferior siguiendo el
+  intradós (corte y cruce con Ld en quiebres de descansos), lecho superior corrido o solo en extremos,
+  patas y prolongaciones, repartición transversal por tramo y varilla en la nariz de cada escalón.
+  Guarda e importa configuraciones.
+  Ventana no modal: OK crea el armado sin cerrarla; Seleccionar cambia de elemento y Actualizar
+  relee la geometría.
+author: Osvaldo

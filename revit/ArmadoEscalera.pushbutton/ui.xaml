@@ -1,0 +1,476 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Armado de escalera" Width="1180" Height="800" MinWidth="980" MinHeight="680"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False" Background="#252526" Foreground="#E6E6E6"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True">
+  <Window.Resources>
+    <SolidColorBrush x:Key="CtlBg" Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="CtlBorder" Color="#555558"/>
+    <SolidColorBrush x:Key="Accent" Color="#3DA5F5"/>
+
+    <Style x:Key="Lbl" TargetType="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="CaretBrush" Value="#E6E6E6"/>
+      <Setter Property="SelectionBrush" Value="#3DA5F5"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Padding" Value="3,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Botones -->
+    <Style x:Key="IconBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="IconToggle" TargetType="ToggleButton">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#24527D"/>
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="SpinBtn" TargetType="RepeatButton">
+      <Setter Property="Foreground" Value="#CFCFCF"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="#555558" BorderThickness="1">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="OkBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#3A7BD5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#4C8FE8"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2C63B0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="CloseBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#C42B1C"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ComboBox oscuro -->
+    <ControlTemplate x:Key="CbToggle" TargetType="ToggleButton">
+      <Border x:Name="bd" Background="#1E1E1E" BorderBrush="#555558" BorderThickness="1" CornerRadius="2">
+        <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,7,0"
+              Data="M0,0 L4,4 L8,0" Stroke="#CFCFCF" StrokeThickness="1.4"/>
+      </Border>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+        </Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="ComboBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton Template="{StaticResource CbToggle}" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+              <ContentPresenter IsHitTestVisible="False" Margin="6,0,22,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
+                     Focusable="False" PopupAnimation="Fade">
+                <Border Background="#2B2B2D" BorderBrush="#555558" BorderThickness="1"
+                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="bd" Background="Transparent" Padding="7,3">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#24527D"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#1C3F60"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Pestanas -->
+    <Style TargetType="TabControl">
+      <Setter Property="Background" Value="#2D2D30"/>
+      <Setter Property="BorderBrush" Value="#3F3F46"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style TargetType="TabItem">
+      <Setter Property="Foreground" Value="#B8B8B8"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="bd" Background="#252526" BorderBrush="#3F3F46" BorderThickness="1,1,1,0"
+                    Margin="0,0,2,0" Padding="12,5" CornerRadius="3,3,0,0">
+              <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2D2D30"/>
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="White"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  
+
+    <Style x:Key="Grp" TargetType="GroupBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Margin" Value="4,0,4,4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="GroupBox">
+            <Grid>
+              <Border Margin="0,8,0,0" BorderBrush="#5A5A5E" BorderThickness="1" CornerRadius="3">
+                <ContentPresenter Margin="8,14,8,8"/>
+              </Border>
+              <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,0,0,0" Padding="4,0"
+                      Background="#2D2D30">
+                <ContentPresenter ContentSource="Header" TextElement.FontWeight="SemiBold"
+                                  TextElement.FontSize="11" TextElement.Foreground="#E6E6E6"/>
+              </Border>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="BlueBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#3A7BD5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="10,0">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#4C8FE8"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2C63B0"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bd" Property="Background" Value="#4A4A4E"/>
+                <Setter Property="Foreground" Value="#8A8A8A"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="GrayBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#48484C"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="8,0"
+                    BorderBrush="#5E5E62" BorderThickness="1">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Unit" TargetType="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="4,0,10,0"/>
+      <Setter Property="Foreground" Value="#A8A8A8"/>
+    </Style>
+    <Style x:Key="Hint" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#8C8C8C"/>
+      <Setter Property="FontStyle" Value="Italic"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+  </Window.Resources>
+
+  <Border BorderBrush="#3F3F46" BorderThickness="1">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="34"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="50"/>
+      </Grid.RowDefinitions>
+
+      <Border x:Name="titleBar" Grid.Row="0" Background="#1B1B1D">
+        <Grid>
+          <TextBlock Tag="t:title" Text="ARMADO DE ESCALERA / RAMPA" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontWeight="SemiBold" FontSize="13" IsHitTestVisible="False"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0">
+            <ComboBox x:Name="cbLang" Width="64" Margin="0,0,8,0"/>
+            <Button x:Name="btnClose" Style="{StaticResource CloseBtn}" Width="34" Height="28" Content="✕" FontSize="14"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="8,8,8,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="42*"/>
+          <ColumnDefinition Width="8"/>
+          <ColumnDefinition Width="58*"/>
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="320"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <TabControl x:Name="tabs" Grid.Row="0" SelectedIndex="0">
+            <TabItem x:Name="tabGen" Header="General" Tag="t:tab_gen">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,8,10,6">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:kind" Text="Tipo" /><ComboBox x:Name="cbKind" Width="170" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Lbl}" Tag="t:rot" Text="Dirección" Margin="12,0,6,0"/><ComboBox x:Name="cbRot" Width="150" VerticalAlignment="Center"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:cov_b" Text="Recubrimiento inferior" /><TextBox x:Name="tbCovB" Width="40" Text="2.5" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/><TextBlock Style="{StaticResource Lbl}" Tag="t:cov_t" Text="superior" Margin="10,0,6,0"/><TextBox x:Name="tbCovT" Width="40" Text="2.5" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:cov_s" Text="Recubrimiento lateral y de extremos" /><TextBox x:Name="tbCovS" Width="40" Text="2.5" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:partition" Text="Partición" /><TextBox x:Name="tbPartition" Width="140"/></StackPanel>
+                  <CheckBox x:Name="chkReplace" IsChecked="True" Tag="t:replace" Margin="0,2,0,8"
+                            Content="Reemplazar el armado creado antes con esta herramienta"/>
+                  <Border Height="1" Background="#3F3F46" Margin="0,0,0,6"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:lap" Text="Traslape (× db)" /><TextBox x:Name="tbLap" Width="40" Text="40" VerticalAlignment="Center"/><CheckBox x:Name="chkStock" Content="Longitud comercial máx." Tag="t:stock" IsChecked="True" Margin="14,0,6,0"/><TextBox x:Name="tbStock" Width="48" Text="1200" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:lap_style" Text="Unión" /><ComboBox x:Name="cbLapStyle" Width="250" VerticalAlignment="Center"/></StackPanel>
+                  <TextBlock Style="{StaticResource Lbl}" Tag="t:lap_pos" Text="Traslapes (cm horizontales desde el inicio, separados por coma)" Margin="0,0,0,3"/>
+                  <TextBox x:Name="tbLapPos" Margin="0,0,0,8"/>
+                  <TextBlock x:Name="txtInfo" Foreground="#A8A8A8" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="txtSummary" Foreground="#CFCFCF" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                </StackPanel>
+              </ScrollViewer>
+            </TabItem>
+            <TabItem x:Name="tabLong" Header="Longitudinal" Tag="t:tab_long">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,6,8,4">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid Grid.Column="0"><GroupBox Style="{StaticResource Grp}" Header="LECHO INFERIOR" Tag="t:g_bot" Margin="0,0,6,0"><StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Varilla" Width="96"/><ComboBox x:Name="cbBotBt" Width="96" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Lbl}" Margin="6,0,6,0" Text="@"/><TextBox x:Name="tbBotSp" Width="36" Text="20" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:ext" Text="Prolongación ini./fin" Width="130"/><TextBox x:Name="tbBotExt0" Width="34" Text="0" VerticalAlignment="Center"/><TextBox x:Name="tbBotExt1" Width="34" Text="0" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:leg" Text="Pata ini./fin" Width="130"/><TextBox x:Name="tbBotLeg0" Width="34" Text="15" VerticalAlignment="Center"/><TextBox x:Name="tbBotLeg1" Width="34" Text="15" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><CheckBox x:Name="chkBotSplit" Tag="t:split" Content="Cortar y cruzar en quiebres" IsChecked="True" Margin="0,0,10,0"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0"><TextBlock Style="{StaticResource Lbl}" Tag="t:ld" Text="Anclaje Ld" Width="130"/><TextBox x:Name="tbBotLd" Width="40" Text="60" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel></StackPanel></GroupBox></Grid>
+                  <Grid Grid.Column="1"><GroupBox Style="{StaticResource Grp}" Header="LECHO SUPERIOR" Tag="t:g_top" Margin="0"><StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><CheckBox x:Name="chkTopOn" Tag="t:top_on" Content="Crear lecho superior" IsChecked="True" Margin="0,0,10,0"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Varilla" Width="70"/><ComboBox x:Name="cbTopBt" Width="96" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Lbl}" Margin="6,0,6,0" Text="@"/><TextBox x:Name="tbTopSp" Width="36" Text="20" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:mode" Text="Colocación" Width="70"/><ComboBox x:Name="cbTopMode" Width="136" VerticalAlignment="Center"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:l_ends" Text="L ini./fin" Width="70"/><TextBox x:Name="tbTopL0" Width="40" Text="100" VerticalAlignment="Center"/><TextBox x:Name="tbTopL1" Width="40" Text="100" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,0,0,7"><TextBlock Style="{StaticResource Lbl}" Tag="t:leg" Text="Pata ini./fin" Width="70"/><TextBox x:Name="tbTopLeg0" Width="34" Text="15" VerticalAlignment="Center"/><TextBox x:Name="tbTopLeg1" Width="34" Text="15" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0"><CheckBox x:Name="chkTopSplit" Tag="t:split" Content="Cortar y cruzar en quiebres" IsChecked="True" Margin="0,0,10,0"/><TextBlock Style="{StaticResource Lbl}" Tag="t:ld" Text="Ld" Margin="0,0,6,0"/><TextBox x:Name="tbTopLd" Width="36" Text="50" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel></StackPanel></GroupBox></Grid>
+                </Grid>
+              </ScrollViewer>
+            </TabItem>
+            <TabItem x:Name="tabTr" Header="Transversal" Tag="t:tab_tr">
+              <StackPanel Margin="12,10,12,6">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><CheckBox x:Name="chkTrBot" Tag="t:tr_bot" Content="Repartición inferior" IsChecked="True" Margin="0,0,10,0"/><ComboBox x:Name="cbTrBotBt" Width="100" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Lbl}" Margin="6,0,6,0" Text="@"/><TextBox x:Name="tbTrBotSp" Width="36" Text="25" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><CheckBox x:Name="chkTrTop" Tag="t:tr_top" Content="Repartición superior" IsChecked="True" Margin="0,0,10,0"/><ComboBox x:Name="cbTrTopBt" Width="100" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Lbl}" Margin="6,0,6,0" Text="@"/><TextBox x:Name="tbTrTopSp" Width="36" Text="25" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/></StackPanel>
+                <TextBlock Style="{StaticResource Hint}" Tag="t:tr_hint" Margin="0,4,0,0"
+                           Text="Las varillas de repartición se colocan a lo ancho, por dentro de las longitudinales, y se agrupan por tramo recto."/>
+              </StackPanel>
+            </TabItem>
+            <TabItem x:Name="tabSteps" Header="Escalones" Tag="t:tab_steps">
+              <StackPanel Margin="12,10,12,6">
+                <TextBlock x:Name="txtSteps" Foreground="#CFCFCF" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,7"><CheckBox x:Name="chkNose" Tag="t:nose_on" Content="Varilla en la nariz de cada escalón" IsChecked="True" Margin="0,0,10,0"/><ComboBox x:Name="cbNoseBt" Width="100" VerticalAlignment="Center"/></StackPanel>
+                <TextBlock Style="{StaticResource Hint}" Tag="t:steps_hint" Margin="0,4,0,0"
+                           Text="Las narices con el mismo paso se agrupan en un solo conjunto."/>
+              </StackPanel>
+            </TabItem>
+          </TabControl>
+          <Border Grid.Row="2" Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1">
+            <Grid>
+              <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <DockPanel Grid.Row="0" Margin="10,4,6,0">
+                
+                <TextBlock x:Name="txtSecHeader" Foreground="#A8A8A8" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+              </DockPanel>
+              <Canvas x:Name="secCanvas" Grid.Row="1" Margin="6" Background="#262628" ClipToBounds="True"/>
+              <TextBlock x:Name="txtSecFooter" Grid.Row="2" Margin="10,0,10,6" Foreground="#E6E6E6" TextWrapping="Wrap"/>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <Border Grid.Column="2" Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="1">
+          <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <DockPanel Grid.Row="0" Margin="10,4,6,0">
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><ToggleButton x:Name="btnShowBot" Style="{StaticResource IconToggle}" Height="22" Padding="8,0" Margin="0,0,4,0" IsChecked="True"><TextBlock Tag="t:show_bot" Text="Inferior" FontSize="11"/></ToggleButton><ToggleButton x:Name="btnShowTop" Style="{StaticResource IconToggle}" Height="22" Padding="8,0" Margin="0,0,4,0" IsChecked="True"><TextBlock Tag="t:show_top" Text="Superior" FontSize="11"/></ToggleButton><ToggleButton x:Name="btnShowTr" Style="{StaticResource IconToggle}" Height="22" Padding="8,0" Margin="0,0,4,0" IsChecked="True"><TextBlock Tag="t:show_tr" Text="Repartición" FontSize="11"/></ToggleButton></StackPanel>
+              <TextBlock x:Name="txtProfHeader" Foreground="#A8A8A8" FontWeight="SemiBold" VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+            <Canvas x:Name="profCanvas" Grid.Row="1" Margin="6" Background="#262628" ClipToBounds="True" />
+            <TextBlock x:Name="txtHint" Grid.Row="2" Margin="10,0,10,6" Foreground="#8FB3D6" FontStyle="Italic" TextWrapping="Wrap"/>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Grid Grid.Row="2" Margin="10,8,24,8">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+          <Button x:Name="btnSave" Style="{StaticResource BlueBtn}" Height="30" MinWidth="100">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="14" Height="14" Margin="0,0,6,0">
+                <Path Stroke="White" StrokeThickness="1.3" Data="M1,1 L10,1 L13,4 L13,13 L1,13 Z M4,1 L4,5 L10,5 L10,1 M3,13 L3,8 L11,8 L11,13"/>
+              </Canvas>
+              <TextBlock Tag="t:save" Text="Guardar"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="btnImport" Style="{StaticResource BlueBtn}" Height="30" MinWidth="100" Margin="8,0,0,0">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="15" Height="14" Margin="0,0,6,0">
+                <Path Stroke="White" StrokeThickness="1.3" Data="M1,3 L5,3 L6.5,5 L13,5 L13,13 L1,13 Z"/>
+              </Canvas>
+              <TextBlock Tag="t:import" Text="Importar"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="btnPick" Style="{StaticResource GrayBtn}" Height="30" MinWidth="96" Margin="18,0,0,0" Content="Seleccionar"/>
+          <Button x:Name="btnRefresh" Style="{StaticResource GrayBtn}" Height="30" MinWidth="90" Margin="8,0,0,0" Content="Actualizar"/>
+        </StackPanel>
+        <TextBlock x:Name="txtStatus" Foreground="#E8A13A" VerticalAlignment="Center" TextWrapping="Wrap"
+                   Margin="440,0,130,0" TextTrimming="CharacterEllipsis"/>
+        <Button x:Name="btnOK" Style="{StaticResource OkBtn}" Content="OK" Width="96" Height="30" HorizontalAlignment="Right"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
