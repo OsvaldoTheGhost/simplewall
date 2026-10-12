@@ -1622,6 +1622,10 @@ class BeamRebarWindow(forms.WPFWindow):
             return y_top + (m.h / 2.0 - y) * sy
 
         self._elev_map = (S0, sx, pad)
+        if getattr(m, 'slope', 0.0) > 0.05:
+            d_text(cv, W - 8, 4, (u'Viga inclinada %.1f° · alzado desarrollado a lo largo de la viga' if self.lang == 0
+                                  else u'Sloped beam %.1f° · elevation unrolled along the beam') % m.slope,
+                   '#F0A030', 10.5, 'rt')
         # apoyos
         for n in m.nodes:
             if n.free:

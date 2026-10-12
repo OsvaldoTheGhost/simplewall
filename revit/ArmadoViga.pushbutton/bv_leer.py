@@ -220,13 +220,20 @@ class _Ctx(object):
                 pass
         return (self.fr.l(p) - self.info['l_c']) * FT
 
+    def z(self, p):
+        """Altura (pies) perpendicular a la viga (la Z del modelo en vigas horizontales)."""
+        try:
+            return self.fr.z(p)
+        except Exception:
+            return p.Z
+
     def zrange(self, host_id):
         return self.z_of.get(host_id, (self.info['z0'], self.info['z1']))
 
 
 def _leg(p, q, ctx):
     """Largo de la pata si el tramo p-q es vertical (cm), si no 0."""
-    dz = abs(q.Z - p.Z) * FT
+    dz = abs(ctx.z(q) - ctx.z(p)) * FT
     return dz if dz > 3.0 and abs(ctx.s_cm(q) - ctx.s_cm(p)) < 1.0 else 0.0
 
 
@@ -283,7 +290,7 @@ def read_existing(doc, info):
                 n = len(cs)
             n = max(n, 1)
             ls = [ctx.l_cm(p) for p in first]
-            zs = [p.Z * FT for p in first]
+            zs = [ctx.z(p) * FT for p in first]
             stirrups.append({'bt': bname, 'dm': dm, 'n': n, 's0': cs[0], 's1': cs[-1],
                              'sp': (cs[-1] - cs[0]) / (n - 1) if n > 1 else 0.0,
                              'b': max(ls) - min(ls) + dm, 'h': max(zs) - min(zs) + dm})
@@ -295,7 +302,7 @@ def read_existing(doc, info):
             # posicion en la seccion: centro del tramo mas largo a lo largo de la viga (sin patas ni ganchos)
             k = max(range(len(pts) - 1), key=lambda j: abs(ss[j + 1] - ss[j]))
             pm = [pts[k], pts[k + 1]]
-            zc = (pm[0].Z + pm[1].Z) / 2.0
+            zc = (ctx.z(pm[0]) + ctx.z(pm[1])) / 2.0
             rel = (zc - z0) / max(z1 - z0, 1e-9)
             # patas: al principio y al final de la polilinea, del lado de menor y mayor s
             l_first, l_last = _leg(pts[0], pts[1], ctx), _leg(pts[-2], pts[-1], ctx)

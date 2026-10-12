@@ -59,6 +59,10 @@ def _desc(info, model, errors):
     except Exception:
         tname = u''
     lines = [u'%d viga(s) · %s' % (len(info['chain']), tname)]
+    fr = info.get('frame')
+    if getattr(fr, 'sloped', False):
+        lines.append(u'Viga inclinada %.1f°: longitudes medidas a lo largo de la viga y alturas perpendiculares a '
+                     u'ella; el alzado se dibuja desarrollado (horizontal).' % abs(fr.angle))
     if model.joints:
         y0 = model.sec(0)['yc'] + model.sec(0)['h'] / 2.0
         secs = []
@@ -138,6 +142,8 @@ class Session(object):
         self.templates = R.get_section_templates(self.doc)
         model = G.BeamModel(info['b'], info['h'], info['L'], info['supports'], parts=info.get('parts'),
                             bends=info.get('bends'), end_parts=info.get('end_parts'))
+        fr = info.get('frame')
+        model.slope = abs(fr.angle) if getattr(fr, 'sloped', False) else 0.0      # para el alzado
         ctx = {
             'model': model,
             'bar_types': self.bar_types,

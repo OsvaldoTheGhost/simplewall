@@ -233,18 +233,21 @@ def _section_box_points(el):
         return []
     d = d.Normalize()
     n = XYZ(-d.Y, d.X, 0.0)
+    sloped = abs(p1.Z - p0.Z) > 1e-3
     z1 = max(p0.Z, p1.Z)
     z0 = z1 - h
     try:                                   # la caja del ejemplar respeta la justificacion en z
         bb = el.get_BoundingBox(None)
-        if bb is not None and bb.Max.Z - bb.Min.Z > 1e-3:
+        if not sloped and bb is not None and bb.Max.Z - bb.Min.Z > 1e-3:
             z0, z1 = bb.Min.Z, bb.Max.Z
     except Exception:
         pass
     pts = []
     for p in (p0, p1):
+        # viga inclinada: la linea de ubicacion es la cara superior en cada extremo
+        top, bot = (p.Z, p.Z - h) if sloped else (z1, z0)
         for k in (-0.5, 0.5):
-            for z in (z0, z1):
+            for z in (bot, top):
                 pts.append(XYZ(p.X + n.X * b * k, p.Y + n.Y * b * k, z))
     return pts
 
@@ -286,16 +289,42 @@ def solid_points(el, src=None):
     return pts
 
 
-class Frame(object):
-    """Sistema local de la cadena de vigas (pies)."""
+def fr_w(fr):
+    """Normal del plano 'horizontal' de la viga (Z en vigas horizontales)."""
+    return getattr(fr, 'w', XYZ.BasisZ)
 
-    def __init__(self, O, u):
+
+class Frame(object):
+    """Sistema local de la cadena de vigas (pies).
+
+    u: a lo largo de la viga (inclinada si la viga lo esta), v: horizontal a lo ancho, w: "altura"
+    perpendicular a la viga dentro del plano vertical que la contiene (Z en vigas horizontales).
+    z(p) = O.Z + (p - O)·w: en vigas horizontales (O.Z = 0) es la Z del modelo, como antes."""
+
+    def __init__(self, O, u, t=None):
         self.O = O
-        self.u = u
         self.v = XYZ.BasisZ.CrossProduct(u).Normalize()
+        self.u = t if t is not None else u
+        self.w = self.u.CrossProduct(self.v).Normalize()
+        self.sloped = abs(self.u.Z) > 1e-6
+
+    @property
+    def angle(self):
+        """Pendiente de la viga (grados)."""
+        return math.degrees(math.asin(max(-1.0, min(1.0, self.u.Z))))
 
     def s(self, p):
-        return (p.X - self.O.X) * self.u.X + (p.Y - self.O.Y) * self.u.Y
+        return (p.X - self.O.X) * self.u.X + (p.Y - self.O.Y) * self.u.Y + (p.Z - self.O.Z) * self.u.Z
+
+    def z(self, p):
+        return self.O.Z + (p.X - self.O.X) * self.w.X + (p.Y - self.O.Y) * self.w.Y + (p.Z - self.O.Z) * self.w.Z
+
+    def world(self, s, l, z):
+        """Punto del modelo a partir de (s, l, z) del marco (pies)."""
+        dz = z - self.O.Z
+        return XYZ(self.O.X + self.u.X * s + self.v.X * l + self.w.X * dz,
+                   self.O.Y + self.u.Y * s + self.v.Y * l + self.w.Y * dz,
+                   self.O.Z + self.u.Z * s + self.v.Z * l + self.w.Z * dz)
 
     def l(self, p):
         return (p.X - self.O.X) * self.v.X + (p.Y - self.O.Y) * self.v.Y
@@ -304,11 +333,11 @@ class Frame(object):
 def _ranges(frame, pts):
     ss = [frame.s(p) for p in pts]
     ll = [frame.l(p) for p in pts]
-    zz = [p.Z for p in pts]
+    zz = [frame.z(p) for p in pts]
     return min(ss), max(ss), min(ll), max(ll), min(zz), max(zz)
 
 
-def _own_z(el, jz):
+def _own_z(el, jz, fr=None):
     """Altura propia de la viga, antes de uniones y cortes: (z0, z1) en pies.
 
     En Revit las losas / cimentaciones unidas cortan la viga (su parte superior desaparece del
@@ -330,7 +359,7 @@ def _own_z(el, jz):
             for s in sols:
                 for e in s.Edges:
                     try:
-                        zs.extend(p.Z for p in e.Tessellate())
+                        zs.extend((fr.z(p) if fr is not None else p.Z) for p in e.Tessellate())
                     except Exception:
                         pass
             if zs:
@@ -339,7 +368,7 @@ def _own_z(el, jz):
         pass
     try:
         bb = el.get_BoundingBox(None)
-        if bb is not None:
+        if bb is not None and (fr is None or not fr.sloped):     # la caja no sirve en vigas inclinadas
             cands.append((bb.Min.Z, bb.Max.Z))
     except Exception:
         pass
@@ -390,8 +419,8 @@ def analyze_chain(doc, beams):
             errors.append((bm, u'no es una viga recta'))
             continue
         d = crv.Direction
-        if abs(d.Z) > 0.02:
-            errors.append((bm, u'viga inclinada (no soportada)'))
+        if abs(d.Z) > 0.98:
+            errors.append((bm, u'viga vertical (no soportada)'))
             continue
         lines.append((bm, crv))
     if not lines:
@@ -406,16 +435,29 @@ def analyze_chain(doc, beams):
             best = (tot, d, crv)
     u = best[1]
     p0 = best[2].GetEndPoint(0)
-    fr = Frame(XYZ(p0.X, p0.Y, 0.0), u)
+    # viga inclinada: el marco sigue su pendiente (u a lo largo de la viga, w perpendicular a ella); todas
+    # las vigas de la cadena deben tener la misma pendiente y estar en la misma recta en planta
+    t = best[2].Direction.Normalize()
+    if t.X * u.X + t.Y * u.Y < 0:
+        t = t.Negate()
+    sloped = abs(t.Z) > 0.02
+    fr = Frame(XYZ(p0.X, p0.Y, p0.Z) if sloped else XYZ(p0.X, p0.Y, 0.0), u, t if sloped else None)
 
     cos_max = math.cos(math.radians(MAX_SKEW_DEG))
     chain = []
     embedded = []                        # vigas sin solido propio (embebidas): se miden de otra forma
     for bm, crv in lines:
+        tb = crv.Direction.Normalize()
+        if (abs(tb.Z) > 0.02) != sloped or (sloped and abs(abs(tb.DotProduct(fr.u)) - 1.0) > 1e-4):
+            errors.append((bm, u'tiene otra pendiente que las demás vigas (%.1f°); arme cada una aparte'
+                           % math.degrees(math.asin(max(-1.0, min(1.0, abs(tb.Z)))))))
+            continue
         d = _hdir(crv)
         if d.DotProduct(u) < 0:
             d = d.Negate()
         dot = d.DotProduct(u)
+        if sloped:
+            dot = 1.0                               # misma recta (se comprobo arriba)
         if dot < cos_max:
             errors.append((bm, u'no es paralela a las demás vigas (%.1f°)'
                            % math.degrees(math.acos(max(-1.0, min(1.0, dot))))))
@@ -434,14 +476,15 @@ def analyze_chain(doc, beams):
         bb = [(p.X - P0.X) * n.X + (p.Y - P0.Y) * n.Y for p in pts]
         w = max(bb) - min(bb)
         bc = (max(bb) + min(bb)) / 2.0                      # eje geometrico respecto a la ubicacion
-        C = XYZ(P0.X + n.X * bc, P0.Y + n.Y * bc, 0.0)
+        C = XYZ(P0.X + n.X * bc, P0.Y + n.Y * bc, P0.Z if sloped else 0.0)
         cs, cl, du, dv = fr.s(C), fr.l(C), dot, d.DotProduct(fr.v)
         ss = [fr.s(p) for p in pts]
         s0, s1 = min(ss), max(ss)
         lc_a = cl + (s0 - cs) / du * dv
         lc_b = cl + (s1 - cs) / du * dv
-        jz = (min(p.Z for p in pts), max(p.Z for p in pts))
-        z0, z1 = _own_z(bm, jz)
+        zz = [fr.z(p) for p in pts]
+        jz = (min(zz), max(zz))
+        z0, z1 = _own_z(bm, jz, fr)
         chain.append({'elem': bm, 's0': s0, 's1': s1, 'l0': min(lc_a, lc_b) - w / 2.0,
                       'l1': max(lc_a, lc_b) + w / 2.0, 'z0': z0, 'z1': z1,
                       'w': w, 'lc_a': lc_a, 'lc_b': lc_b, 'bc': bc, 'jz': jz,
@@ -824,7 +867,7 @@ class Axis(object):
 
     def direction(self, m):
         fr = self.fr
-        return XYZ(fr.u.X + fr.v.X * m, fr.u.Y + fr.v.Y * m, 0.0).Normalize()
+        return XYZ(fr.u.X + fr.v.X * m, fr.u.Y + fr.v.Y * m, fr.u.Z).Normalize()
 
     def crosses(self, s0, s1):
         """La varilla (pies) cruza completo algun cambio de eje."""
@@ -853,10 +896,12 @@ def find_supports(doc, info):
     corners = []
     for s in (s_min - 3.0, s_min + Lft + 3.0):
         for l in (info['l0'] - 2.0, info['l1'] + 2.0):
-            corners.append(fr.O.Add(fr.u.Multiply(s)).Add(fr.v.Multiply(l)))
+            for z in (info['z0'] - 0.5, info['z1'] + 0.5):
+                corners.append(fr.world(s, l, z))
     xs = [p.X for p in corners]
     ys = [p.Y for p in corners]
-    outline = Outline(XYZ(min(xs), min(ys), info['z0'] - 0.5), XYZ(max(xs), max(ys), info['z1'] + 0.5))
+    zs = [p.Z for p in corners]
+    outline = Outline(XYZ(min(xs), min(ys), min(zs)), XYZ(max(xs), max(ys), max(zs)))
     cats = List[BuiltInCategory]()
     for c in (BuiltInCategory.OST_StructuralColumns, BuiltInCategory.OST_Walls,
               BuiltInCategory.OST_StructuralFraming):
@@ -873,9 +918,14 @@ def find_supports(doc, info):
         pts = solid_points(el)
         if not pts:
             continue
+        if fr.sloped:
+            # viga inclinada: de una columna o muro (vertical) solo cuenta la parte a la altura de la viga; sus
+            # vertices lejanos (el pie de la columna) correrian su posicion a lo largo de la viga
+            near_pts = [p for p in pts if info['z0'] - 1.0 <= fr.z(p) <= info['z1'] + 1.0]
+            pts = near_pts or pts
         cs0, cs1, cl0, cl1, cz0, cz1 = _ranges(fr, pts)
         # altura propia del apoyo (una losa unida puede recortar el dado igual que a la viga)
-        cz0, cz1 = _own_z(el, (cz0, cz1))
+        cz0, cz1 = _own_z(el, (cz0, cz1), fr)
         # se compara con la viga de la cadena que esta ahi (su eje, su ancho, su nivel y su direccion),
         # no con la envolvente: la cadena puede girar o cambiar de nivel
         near = [c for c in info['chain'] if c['s0'] - 0.1 <= cs1 and c['s1'] + 0.1 >= cs0]
@@ -1044,8 +1094,8 @@ class Builder(object):
             ll, m = ax.run_l(run, ss), ax.runs[run][2]
         n = ax.normal(m)
         xf = x / FT
-        return XYZ(fr.O.X + fr.u.X * ss + fr.v.X * ll + n.X * xf, fr.O.Y + fr.u.Y * ss + fr.v.Y * ll + n.Y * xf,
-                   self.info['z_c'] + y / FT)
+        b = fr.world(ss, ll, self.info['z_c'] + y / FT)
+        return XYZ(b.X + n.X * xf, b.Y + n.Y * xf, b.Z + n.Z * xf)
 
     def local(self, p):
         fr = self.fr
@@ -1055,10 +1105,11 @@ class Builder(object):
         for _ in range(4):
             ll, m = ax.l(s), ax.slope(s)
             n = ax.normal(m)
-            bx, by = fr.O.X + fr.u.X * s + fr.v.X * ll, fr.O.Y + fr.u.Y * s + fr.v.Y * ll
+            bw = fr.world(s, ll, fr.z(p))
+            bx, by = bw.X, bw.Y
             x = (p.X - bx) * n.X + (p.Y - by) * n.Y
-            s = fr.s(XYZ(p.X - n.X * x, p.Y - n.Y * x, 0.0))
-        return (x * FT, (p.Z - self.info['z_c']) * FT, self._cm(s))
+            s = fr.s(XYZ(p.X - n.X * x, p.Y - n.Y * x, p.Z))
+        return (x * FT, (fr.z(p) - self.info['z_c']) * FT, self._cm(s))
 
     def run_of(self, s0, s1):
         """None si la varilla (cm) cruza un cambio de eje (se dobla en planta); si no, su run."""
@@ -1171,7 +1222,7 @@ class Builder(object):
         # barra central con gancho horizontal, traslape desfasado en horizontal o doblez en planta: plano
         # horizontal y cada varilla por separado (los ganchos de los dos lados son simetricos, no una copia)
         flat = bool(b.get('off_x')) or any(v > 0.01 for v in (b.get('hin') or ())) or run is None
-        norm = XYZ.BasisZ if flat else self.axis.normal(self.axis.runs[run][2])
+        norm = fr_w(self.fr) if flat else self.axis.normal(self.axis.runs[run][2])
         xs = sorted(b['xs'])
         n = len(xs)
         if n > 1 and G.is_uniform(xs) and not flat:
@@ -1294,7 +1345,7 @@ class Builder(object):
                 S1 = max(S1, b['s1'])
             mid = (S0 + S1) / 2.0
             half = (S1 - S0) / 2.0 + 40.0
-            vs = self._section(vft, self.P(mid, 0, 0), fr.u, XYZ.BasisZ, fr.u.CrossProduct(XYZ.BasisZ),
+            vs = self._section(vft, self.P(mid, 0, 0), fr.u, fr.w, fr.u.CrossProduct(fr.w),
                                half, m.h / 2.0 + 80.0, -(m.b / 2.0 + 15.0), m.b / 2.0 + 15.0,
                                u'Armado viga %s' % label, templates.get(v.get('elev_tpl')), 25)
             if vs is not None:
@@ -1304,7 +1355,7 @@ class Builder(object):
                 fa, fb = m.span_faces(i)
                 run = self.axis.home(self._ft(fa), self._ft(fb))
                 mm = self.axis.runs[run][2]
-                vs = self._section(vft, self.P((fa + fb) / 2.0, 0, 0, run), self.axis.normal(mm), XYZ.BasisZ,
+                vs = self._section(vft, self.P((fa + fb) / 2.0, 0, 0, run), self.axis.normal(mm), fr.w,
                                    self.axis.direction(mm),
                                    m.b / 2.0 + 30.0, m.h / 2.0 + 30.0, -40.0, 0.0,
                                    u'Armado viga %s - T%d' % (label, i + 1), templates.get(v.get('cross_tpl')), 20)
