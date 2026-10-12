@@ -183,8 +183,13 @@ class StairModel(object):
         n = len(P)
         smin = min(p[0] for p in P)
         smax = max(p[0] for p in P)
-        iL = min([i for i in range(n) if P[i][0] <= smin + 0.5], key=lambda i: P[i][1])
-        iR = min([i for i in range(n) if P[i][0] >= smax - 0.5], key=lambda i: P[i][1])
+        # extremos del intrados: el vertice mas bajo cerca de cada extremo. En una losa / rampa inclinada con los
+        # extremos cortados perpendiculares a ella, la esquina superior queda unos cm 'antes' que la inferior;
+        # con una tolerancia de 0.5 cm se tomaba la superior y la cara del extremo pasaba a ser intrados
+        # (garganta = largo de la rampa)
+        tol = max(0.5, min(30.0, 0.1 * (smax - smin)))
+        iL = min([i for i in range(n) if P[i][0] <= smin + tol], key=lambda i: (P[i][1], P[i][0]))
+        iR = min([i for i in range(n) if P[i][0] >= smax - tol], key=lambda i: (P[i][1], -P[i][0]))
         low = [iL]
         i = iL
         while i != iR:
