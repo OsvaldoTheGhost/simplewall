@@ -386,23 +386,32 @@ class Frame(object):
     def _h(self, p):
         return (p.X - self.O.X) * self.uh.X + (p.Y - self.O.Y) * self.uh.Y
 
-    def s(self, p):
+    def s(self, p, k=None):
+        """k: medir respecto al tramo k del perfil (los puntos de una viga, que es recta, van a su tramo)."""
         if not self.prof:
             return self._h(p)
         h, z = self._h(p), p.Z
-        k = self._k_of_pt(h, z)
+        k = self._k_of_pt(h, z) if k is None else k
         q = self.seg[k]
         return q[4] + (h - q[0]) * q[2] + (z - q[1]) * q[3]
 
     def l(self, p):
         return (p.X - self.O.X) * self.v.X + (p.Y - self.O.Y) * self.v.Y
 
-    def z(self, p):
+    def z(self, p, k=None):
         if not self.prof:
             return p.Z
         h, z = self._h(p), p.Z
-        q = self.seg[self._k_of_pt(h, z)]
+        q = self.seg[self._k_of_pt(h, z) if k is None else k]
         return self.zref + (z - q[1]) * q[2] - (h - q[0]) * q[3]
+
+    def seg_of(self, crv):
+        """Tramo del perfil de una viga recta (el de la mitad de su linea de ubicacion)."""
+        if not self.prof:
+            return None
+        a, b = crv.GetEndPoint(0), crv.GetEndPoint(1)
+        m = XYZ((a.X + b.X) / 2.0, (a.Y + b.Y) / 2.0, (a.Z + b.Z) / 2.0)
+        return self._k_of_pt(self._h(m), m.Z)
 
     def world(self, s, l, z, k=None):
         """Punto del modelo a partir de (s, l, z) del marco (pies). k: forzar el tramo k del perfil (su recta
@@ -435,7 +444,7 @@ def _ranges(frame, pts):
     return min(ss), max(ss), min(ll), max(ll), min(zz), max(zz)
 
 
-def _own_z(el, jz, fr=None):
+def _own_z(el, jz, fr=None, k=None):
     """Altura propia de la viga, antes de uniones y cortes: (z0, z1) en pies.
 
     En Revit las losas / cimentaciones unidas cortan la viga (su parte superior desaparece del
@@ -457,7 +466,7 @@ def _own_z(el, jz, fr=None):
             for s in sols:
                 for e in s.Edges:
                     try:
-                        zs.extend((fr.z(p) if fr is not None else p.Z) for p in e.Tessellate())
+                        zs.extend((fr.z(p, k) if fr is not None else p.Z) for p in e.Tessellate())
                     except Exception:
                         pass
             if zs:
@@ -621,13 +630,14 @@ def analyze_chain(doc, beams):
         else:
             C = XYZ(P0.X + n.X * bc, P0.Y + n.Y * bc, 0.0)
         cs, cl, du, dv = fr.s(C), fr.l(C), dot, d.DotProduct(fr.v)
-        ss = [fr.s(p) for p in pts]
+        kb = fr.seg_of(crv)                         # tramo del perfil de esta viga (None si es horizontal)
+        ss = [fr.s(p, kb) for p in pts]
         s0, s1 = min(ss), max(ss)
         lc_a = cl + (s0 - cs) / du * dv
         lc_b = cl + (s1 - cs) / du * dv
-        zz = [fr.z(p) for p in pts]
+        zz = [fr.z(p, kb) for p in pts]
         jz = (min(zz), max(zz))
-        z0, z1 = _own_z(bm, jz, fr)
+        z0, z1 = _own_z(bm, jz, fr, kb)
         chain.append({'elem': bm, 's0': s0, 's1': s1, 'l0': min(lc_a, lc_b) - w / 2.0,
                       'l1': max(lc_a, lc_b) + w / 2.0, 'z0': z0, 'z1': z1,
                       'w': w, 'lc_a': lc_a, 'lc_b': lc_b, 'bc': bc, 'jz': jz,
@@ -752,6 +762,13 @@ def analyze_chain(doc, beams):
                          % (eid_int(c['elem'].Id), abs(math.degrees(math.atan(m_c) - math.atan(r['line'][2]))),
                             eid_int(ref['elem'].Id), eid_int(ref['elem'].Id)))
     info['parts'] = parts
+    # seccion medida de cada viga: si sale fuera de lo razonable el armado de ese tramo fallara (estribos fuera
+    # del concreto, conjuntos de ancho nulo); se avisa con el Id para revisarla
+    for c, q in zip(chain, parts):
+        b_, h_ = q[2], q[3]
+        if not (10.0 <= b_ <= 300.0) or not (15.0 <= h_ <= 400.0):
+            warns.append(u'la viga Id %d midió %.0f × %.0f cm (ancho × peralte), fuera de lo normal: revise su '
+                         u'geometría (uniones, cortes, sólidos extra)' % (eid_int(c['elem'].Id), b_, h_))
     info['b'] = 2.0 * half
     for bd in bends:
         if bd.get('kink'):
@@ -1402,13 +1419,23 @@ class Builder(object):
         n = len(xs)
         done = []
         try:
-            if n > 1 and G.is_uniform(xs) and not flat:
+            if n > 1 and G.is_uniform(xs) and not flat and xs[-1] - xs[0] > b['bt']['dm']:
                 rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, xs[0], run),
                              RIGHT, RIGHT)
-                self._layout_fixed(rb, n, (xs[-1] - xs[0]), xs[-1], 'x', run)
-                self.tag(rb, b['kind'])
-                self.rep['count'][b['kind']] += n
-                return
+                try:
+                    self._layout_fixed(rb, n, (xs[-1] - xs[0]), xs[-1], 'x', run)
+                except Exception as ex:
+                    # Revit no acepto el conjunto (p. ej. 'arrayLength isn't acceptable'): varillas sueltas
+                    doc.Delete(rb.Id)
+                    note = (u'%s: Revit no aceptó el conjunto (%s); se crearon las varillas una por una.'
+                            % (b['label'], (u'%s' % ex).split(u'\n')[0].strip()))
+                    if note not in self.rep['notes']:
+                        self.rep['notes'].append(note)
+                    rb = None
+                if rb is not None:
+                    self.tag(rb, b['kind'])
+                    self.rep['count'][b['kind']] += n
+                    return
             for x in xs:
                 rb = _create(doc, RebarStyle.Standard, bt, None, None, host, norm, self._bar_pts(b, x, run),
                              RIGHT, RIGHT)
@@ -1513,8 +1540,14 @@ class Builder(object):
                 self.st_orient = (RIGHT, RIGHT)
                 self.rep['notes'].append(u'No se pudo verificar hacia dónde quedan los ganchos de los '
                                          u'estribos; revíselos visualmente.')
+        if not rb.IsValidObject:
+            raise Exception(u'Revit eliminó el estribo al crearlo (queda fuera del concreto de la viga); revise la '
+                            u'sección de ese tramo en la descripción')
         if st['n'] > 1 and st['sp'] > 0:
             self._layout_spacing(rb, st['n'], st['sp'], s_last, 's', run)
+        if not rb.IsValidObject:
+            raise Exception(u'Revit eliminó el conjunto de estribos (queda fuera del concreto de la viga); revise la '
+                            u'sección de ese tramo en la descripción')
         self.tag(rb, 'stirrups')
         self.rep['count']['stirrups'] += int(st['n'])
 
