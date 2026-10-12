@@ -17,6 +17,7 @@ corregirlo y volver a crearlo.
 Unidades: cm."""
 from __future__ import division
 import json
+import math
 
 import System
 from Autodesk.Revit.DB import BuiltInParameter
@@ -207,6 +208,16 @@ class _Ctx(object):
         return (s - self.info['s_min']) * FT
 
     def l_cm(self, p):
+        """Posicion a lo ancho (cm) respecto al EJE de la viga en ese punto. Una cadena puede girar o
+        desplazarse en los apoyos (contratrabes): respecto a una recta fija, la misma varilla cambiaria de
+        posicion a lo largo de la viga (2.8 grados en 7 m son 34 cm) y sus piezas no se reconocerian."""
+        if self.axis is not None:
+            try:
+                s = self.fr.s(p)
+                m = self.axis._m(s)
+                return (self.fr.l(p) - self.axis.l(s)) / math.sqrt(1.0 + m * m) * FT
+            except Exception:
+                pass
         return (self.fr.l(p) - self.info['l_c']) * FT
 
     def zrange(self, host_id):
