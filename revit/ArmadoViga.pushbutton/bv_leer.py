@@ -339,6 +339,37 @@ def _lines(longs):
     return lines
 
 
+def _slot_groups(pieces):
+    """Agrupa las piezas por lecho, tipo y posicion en la seccion (l, z) con tolerancia de 1.6 diametros
+    (enlace simple: las piezas de traslape desfasadas un diametro quedan en el mismo slot)."""
+    groups = []
+    for p in sorted(pieces, key=lambda q: (q['l'], q['z'])):
+        tl = max(2.0, 1.6 * p['dm'])          # a lo ancho
+        tz = max(1.5, 1.2 * p['dm'])          # en altura: el traslape desfasa 1 diametro; un segundo lecho
+        hit = [g for g in groups if g['layer'] == p['layer'] and g['bt'] == p['bt'] and   # esta a db + t min
+               any(abs(x['l'] - p['l']) <= tl and abs(x['z'] - p['z']) <= tz for x in g['items'])]
+        if not hit:
+            groups.append({'layer': p['layer'], 'bt': p['bt'], 'items': [p]})
+            continue
+        g = hit[0]
+        g['items'].append(p)
+        for o in hit[1:]:                    # p une dos grupos
+            g['items'].extend(o['items'])
+            groups.remove(o)
+    return groups
+
+
+def _union(pieces, gap=JOIN_TOL):
+    """Union de los intervalos [a, b] de las piezas: [(a, b)]."""
+    out = []
+    for x in sorted(pieces, key=lambda q: q['a']):
+        if out and x['a'] <= out[-1][1] + gap:
+            out[-1][1] = max(out[-1][1], x['b'])
+        else:
+            out.append([x['a'], x['b']])
+    return [tuple(q) for q in out]
+
+
 def _slots(pieces):
     """Numero de posiciones distintas a lo ancho (las piezas a menos de 1.6 diametros son la misma)."""
     ls = sorted(x['l'] for x in pieces)
@@ -442,44 +473,71 @@ def to_cfg(ex, model, bts_list):
         if firsts:
             stc['first'] = max(round(_median(firsts) * 2.0) / 2.0, 0.0)
     # ---- longitudinales
-    lines = _lines(ex['longs'])
     n0, n1 = nodes[0], nodes[-1]
     lo_end = n0.s1 + END_TOL if not n0.free else END_TOL
     hi_end = n1.s0 - END_TOL if not n1.free else model.L - END_TOL
     MAIN = ('top_main', 'bot_main')
-    # funcion conocida (marcada al crearla): manda sobre la geometria; si no, de extremo a extremo = corrido
-    full = [ln for ln in lines if ln['kind'] in MAIN or
-            (ln['kind'] is None and ln['a'] <= lo_end and ln['b'] >= hi_end)]
-    part = [ln for ln in lines if ln not in full]
+    # posiciones en la seccion (slots): sin depender del orden de las piezas. Un slot es corrido si la union de
+    # sus piezas (traslapadas, aunque esten desfasadas un diametro) va de apoyo extremo a apoyo extremo, o si
+    # sus piezas se marcaron como corridos al crearlas
+    slots = _slot_groups([x for x in ex['longs'] if x['layer'] in ('sup', 'inf')])
+    full_slots, part_pieces = [], []
+    for sl in slots:
+        kinds = set(x.get('kind') for x in sl['items'])
+        cov = _union(sl['items'])
+        if kinds & set(MAIN) or (kinds <= set([None]) and len(cov) == 1 and cov[0][0] <= lo_end and
+                                 cov[0][1] >= hi_end):
+            sl['cov'] = cov
+            full_slots.append(sl)
+        else:
+            part_pieces.extend(sl['items'])
+    # sin ninguno de extremo a extremo (p. ej. una pieza no llega por unos centimetros): los slots que cubren
+    # casi toda la viga con huecos pequenos tambien son corridos
+    for lay in ('sup', 'inf'):
+        if any(sl['layer'] == lay for sl in full_slots):
+            continue
+        cand = []
+        for sl in slots:
+            if sl['layer'] != lay or any(x.get('kind') not in (None,) + MAIN for x in sl['items']):
+                continue
+            cov = _union(sl['items'], 40.0)
+            if len(cov) == 1 and cov[0][0] <= lo_end + 50.0 and cov[0][1] >= hi_end - 50.0:
+                sl['cov'] = cov
+                cand.append(sl)
+        if cand:
+            notes.append(u'Corridos %s: hay huecos entre sus piezas o no llegan al apoyo extremo; revíselos'
+                         % (u'superiores' if lay == 'sup' else u'inferiores'))
+            full_slots.extend(cand)
+            ids = set(id(x) for sl in cand for x in sl['items'])
+            part_pieces = [x for x in part_pieces if id(x) not in ids]
     for lay, key in (('sup', 'top'), ('inf', 'bot')):
-        fl = [ln for ln in full if ln['layer'] == lay]
+        fl = [sl for sl in full_slots if sl['layer'] == lay]
         c = cfg[key + '_single']
         cfg[key + '_style'] = 'single'
         if not fl:
             c['n'] = 0
             continue
-        bt = _most([ln['bt'] for ln in fl])
-        sel = [ln for ln in fl if ln['bt'] == bt]
+        bt = _most([sl['bt'] for sl in fl])
+        sel = [sl for sl in fl if sl['bt'] == bt]
+        pcs = [x for sl in sel for x in sl['items']]
         c['bt'] = bt if bt in have else c['bt']
-        # cantidad: posiciones distintas en la seccion (las piezas de un traslape, aunque no se hayan unido
-        # en una linea o esten desfasadas un diametro, son la misma varilla)
-        pcs = [x for ln in sel for x in ln['items']]
-        c['n'] = _slots(pcs) or len(sel)
-        a0 = min(x['a'] for x in pcs) if pcs else 0.0
-        b1 = max(x['b'] for x in pcs) if pcs else 0.0
+        c['n'] = len(sel)
+        a0 = min(x['a'] for x in pcs)
+        b1 = max(x['b'] for x in pcs)
         c['La'] = _r(_median([x['leg0'] for x in pcs if x['a'] <= a0 + 5.0]))
         c['Lb'] = _r(_median([x['leg1'] for x in pcs if x['b'] >= b1 - 5.0]))
         c['Lna'] = c['Lnb'] = 0.0
-        others = [ln for ln in fl if ln['bt'] != bt]
+        others = [sl for sl in fl if sl['bt'] != bt]
         if others:
             notes.append(u'Corridos %s: también hay %s; se cargaron como %d %s'
                          % (u'superiores' if lay == 'sup' else u'inferiores',
-                            u', '.join(u'%d %s' % (_slots([x for ln in others if ln['bt'] == n
-                                                            for x in ln['items']]), n)
+                            u', '.join(u'%d %s' % (sum(1 for x in others if x['bt'] == n), n)
                                        for n in sorted(set(x['bt'] for x in others))), c['n'], bt))
         if len(pcs) > c['n']:
             notes.append(u'Corridos %s con traslapes: se recalculan con la longitud comercial / posiciones '
                          u'de Configuración' % (u'superiores' if lay == 'sup' else u'inferiores'))
+    part = _lines(part_pieces)
+    stats = {'full': dict((lay, sum(1 for sl in full_slots if sl['layer'] == lay)) for lay in ('sup', 'inf'))}
     # ---- bastones
     for lay, key in (('sup', 'top_add'), ('inf', 'bot_add')):
         add = G.add_default(model)
@@ -521,20 +579,22 @@ def to_cfg(ex, model, bts_list):
                 add[where][j].append(ly)
         cfg[key] = add
     # ---- piel
-    side = [ln for ln in lines if ln['layer'] == 'piel']
+    side = [x for x in ex['longs'] if x['layer'] == 'piel']
     sd = cfg['side_single']
     cfg['side_style'] = 'single'
     sd['on'] = bool(side)
     if side:
-        bt = _most([ln['bt'] for ln in side])
+        bt = _most([x['bt'] for x in side])
         sd['bt'] = bt if bt in have else sd['bt']
         zs = []
-        for z in sorted(ln['z'] for ln in side):
+        for z in sorted(x['z'] for x in side):
             if not zs or z - zs[-1] > 3.0:
                 zs.append(z)
         sd['rows'] = max(1, min(len(zs), G.SIDE_ROWS_MAX))
-        if any(ln not in full for ln in side):
+        cov = _union(side)
+        if not (len(cov) == 1 and cov[0][0] <= lo_end and cov[0][1] >= hi_end):
             notes.append(u'Piel: no toda corre de extremo a extremo; se cargó como piel corrida')
+    cfg['_stats'] = stats
     return cfg, notes
 
 
@@ -555,10 +615,16 @@ def existing_cfg(doc, info, model, bts_list):
         except Exception:
             pass
     cfg, notes = to_cfg(ex, model, bts_list)
+    stats = cfg.pop('_stats', {})
+    ly = dict((k, [x for x in ex['longs'] if x['layer'] == k]) for k in ('sup', 'inf', 'piel'))
+    diag = (u'Leído: superior %d pieza(s) → %d corrida(s) · inferior %d pieza(s) → %d corrida(s) · piel %d · '
+            u'estribos %d conjunto(s)' % (len(ly['sup']), stats.get('full', {}).get('sup', 0), len(ly['inf']),
+                                          stats.get('full', {}).get('inf', 0), len(ly['piel']), len(ex['stirrups'])))
     why = u'hecho o editado fuera de esta herramienta' if ex['own'] != set(ex['rebars']) or data \
         else u'creado con una versión anterior'
     txt = (u'Armado existente (%d elementos de armadura, %s): se reconstruyó de las varillas y se cargó en '
            u'la configuración; revíselo antes de pulsar OK.' % (nrb, why))
+    txt += u'\n' + diag
     for n in notes:
         txt += u'\nAviso: ' + n
     return cfg, txt
