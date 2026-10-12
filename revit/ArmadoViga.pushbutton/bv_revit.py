@@ -152,16 +152,15 @@ def _solids(geo, out):
             _solids(obj.GetInstanceGeometry(), out)
 
 
-def solid_points(el):
+def _opts():
     opt = Options()
     opt.ComputeReferences = False
     opt.DetailLevel = ViewDetailLevel.Fine
-    geo = el.get_Geometry(opt)
+    return opt
+
+
+def _edge_points(sols):
     pts = []
-    if geo is None:
-        return pts
-    sols = []
-    _solids(geo, sols)
     for s in sols:
         for e in s.Edges:
             try:
@@ -169,6 +168,121 @@ def solid_points(el):
                     pts.append(p)
             except Exception:
                 pass
+    return pts
+
+
+def _original_points(el):
+    """Geometria del ejemplar antes de uniones y cortes (FamilyInstance), en coordenadas del modelo."""
+    try:
+        geo = el.GetOriginalGeometry(_opts())
+        if geo is None:
+            return []
+        geo = geo.GetTransformed(el.GetTransform())
+    except Exception:
+        return []
+    sols = []
+    _solids(geo, sols)
+    return _edge_points(sols)
+
+
+def _param_len(el, names, bips):
+    """Primer parametro de longitud > 0 del ejemplar o de su tipo (pies)."""
+    owners = [el]
+    try:
+        owners.append(el.Document.GetElement(el.GetTypeId()))
+    except Exception:
+        pass
+    for o in owners:
+        if o is None:
+            continue
+        for bip in bips:
+            try:
+                p = o.get_Parameter(bip)
+                if p is not None and p.HasValue and p.AsDouble() > 1e-6:
+                    return p.AsDouble()
+            except Exception:
+                pass
+        for n in names:
+            try:
+                p = o.LookupParameter(n)
+                if p is not None and p.HasValue and p.AsDouble() > 1e-6:
+                    return p.AsDouble()
+            except Exception:
+                pass
+    return None
+
+
+def _section_box_points(el):
+    """Caja de la viga a partir de su linea de ubicacion y el ancho / alto de su tipo (b, h).
+
+    Sirve cuando la viga no tiene ningun solido (p. ej. embebida en un muro o losa que la corta
+    por completo): su armado se sigue considerando con la seccion del tipo."""
+    crv = getattr(getattr(el, 'Location', None), 'Curve', None)
+    if not isinstance(crv, Line):
+        return []
+    b = _param_len(el, (u'b', u'B', u'Ancho', u'ancho', u'Width', u'width', u'Base', u'base'),
+                   (BuiltInParameter.STRUCTURAL_SECTION_COMMON_WIDTH,))
+    h = _param_len(el, (u'h', u'H', u'Altura', u'altura', u'Peralte', u'peralte', u'Height', u'height',
+                        u'Depth', u'depth'),
+                   (BuiltInParameter.STRUCTURAL_SECTION_COMMON_HEIGHT,))
+    if not b or not h:
+        return []
+    p0, p1 = crv.GetEndPoint(0), crv.GetEndPoint(1)
+    d = XYZ(p1.X - p0.X, p1.Y - p0.Y, 0.0)
+    if d.GetLength() < 1e-6:
+        return []
+    d = d.Normalize()
+    n = XYZ(-d.Y, d.X, 0.0)
+    z1 = max(p0.Z, p1.Z)
+    z0 = z1 - h
+    try:                                   # la caja del ejemplar respeta la justificacion en z
+        bb = el.get_BoundingBox(None)
+        if bb is not None and bb.Max.Z - bb.Min.Z > 1e-3:
+            z0, z1 = bb.Min.Z, bb.Max.Z
+    except Exception:
+        pass
+    pts = []
+    for p in (p0, p1):
+        for k in (-0.5, 0.5):
+            for z in (z0, z1):
+                pts.append(XYZ(p.X + n.X * b * k, p.Y + n.Y * b * k, z))
+    return pts
+
+
+def solid_points(el, src=None):
+    """Puntos de la geometria del elemento (pies).
+
+    Si el elemento no tiene solido propio (embebido o cortado por completo por otro elemento) se usa,
+    en orden: su geometria original (antes de uniones), la caja de su seccion (b x h del tipo sobre la
+    linea de ubicacion) y por ultimo su caja envolvente. 'src' (lista) recibe la fuente usada."""
+    pts = []
+    try:
+        geo = el.get_Geometry(_opts())
+    except Exception:
+        geo = None
+    if geo is not None:
+        sols = []
+        _solids(geo, sols)
+        pts = _edge_points(sols)
+    if pts:
+        how = 'solid'
+    else:
+        how = 'original'
+        pts = _original_points(el)
+        if not pts:
+            how = 'section'
+            pts = _section_box_points(el)
+        if not pts:
+            how = 'bbox'
+            try:
+                bb = el.get_BoundingBox(None)
+                if bb is not None:
+                    pts = [XYZ(x, y, z) for x in (bb.Min.X, bb.Max.X) for y in (bb.Min.Y, bb.Max.Y)
+                           for z in (bb.Min.Z, bb.Max.Z)]
+            except Exception:
+                pts = []
+    if src is not None and pts:
+        src.append(how)
     return pts
 
 
@@ -296,6 +410,7 @@ def analyze_chain(doc, beams):
 
     cos_max = math.cos(math.radians(MAX_SKEW_DEG))
     chain = []
+    embedded = []                        # vigas sin solido propio (embebidas): se miden de otra forma
     for bm, crv in lines:
         d = _hdir(crv)
         if d.DotProduct(u) < 0:
@@ -305,10 +420,13 @@ def analyze_chain(doc, beams):
             errors.append((bm, u'no es paralela a las demás vigas (%.1f°)'
                            % math.degrees(math.acos(max(-1.0, min(1.0, dot))))))
             continue
-        pts = solid_points(bm)
+        src = []
+        pts = solid_points(bm, src)
         if not pts:
-            errors.append((bm, u'sin geometría sólida'))
+            errors.append((bm, u'sin geometría (ni sólido, ni sección b × h, ni caja)'))
             continue
+        if src[0] != 'solid':
+            embedded.append((bm, src[0]))
         n = XYZ.BasisZ.CrossProduct(d).Normalize()
         if n.DotProduct(fr.v) < 0:
             n = n.Negate()
@@ -368,6 +486,13 @@ def analyze_chain(doc, beams):
     z0 = min(c['z0'] for c in chain)
     z1 = max(c['z1'] for c in chain)
     warns = []
+    how_txt = {'original': u'su geometría original (antes de uniones)',
+               'section': u'la sección b × h de su tipo sobre su línea de ubicación',
+               'bbox': u'su caja envolvente (revise el ancho si está girada en planta)'}
+    for bm, how in embedded:
+        if any(c['elem'] is bm for c in chain):
+            warns.append(u'la viga Id %d no tiene sólido propio (embebida o cortada por otro elemento); '
+                         u'se midió con %s' % (eid_int(bm.Id), how_txt.get(how, how)))
     info = {'frame': fr, 'chain': chain, 's_min': s_min, 'L': (s_max - s_min) * FT,
             'l_c': (l0 + l1) / 2.0, 'z_c': (z0 + z1) / 2.0, 'b': (l1 - l0) * FT, 'h': (z1 - z0) * FT,
             'l0': l0, 'l1': l1, 'z0': z0, 'z1': z1, 'warns': warns}
