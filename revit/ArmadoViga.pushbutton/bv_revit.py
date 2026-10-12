@@ -1394,6 +1394,12 @@ def build(doc, info, model, cfg, res, bt_elems, hook_elems, templates, replace, 
                 except Exception:
                     pass
         rep['elements'] = len(b.created)
+        # la configuracion queda guardada en la viga: al volver a seleccionarla se carga tal cual
+        try:
+            import bv_leer
+            bv_leer.store_cfg(doc, info, cfg, b.created)
+        except Exception:
+            pass
         t.Commit()
     except Exception:
         rep['fatal'] = traceback.format_exc()

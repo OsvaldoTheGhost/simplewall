@@ -146,15 +146,12 @@ class Session(object):
             'templates': sorted(self.templates.keys()),
             'beam_desc': _desc(info, model, errors),
         }
-        # armado que ya tiene la viga (corridas, bastones, estribos): en la ventana y en el reporte
+        # armado que ya tiene la viga: se carga en la configuracion de la ventana para verlo y corregirlo
         try:
-            ex = LR.read_existing(self.doc, info)
-            ctx['beam_desc'] += u'\n\n' + LR.short_text(ex)
-            ctx['existing'] = ex
-            if ex:
-                out = script.get_output()
-                out.set_title(TITLE)
-                LR.print_report(ex, _label(info), out)
+            cfg, txt = LR.existing_cfg(self.doc, info, model, self.bar_types)
+            if cfg is not None:
+                ctx['cfg'] = cfg
+                ctx['beam_desc'] += u'\n\n' + txt
         except Exception as e:
             ctx['beam_desc'] += u'\n\nNo se pudo leer el armado existente: %s' % e
         return ctx, None

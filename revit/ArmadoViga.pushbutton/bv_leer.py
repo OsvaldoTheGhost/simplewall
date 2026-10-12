@@ -1,37 +1,104 @@
 # -*- coding: utf-8 -*-
-"""Lectura del armado que ya tiene la viga (Revit 2024 - 2026).
+"""Armado que ya tiene la viga -> configuracion de la ventana (Revit 2024 - 2026).
 
-Revisa todas las varillas alojadas en las vigas de la cadena (las creadas con esta herramienta y las
-hechas a mano) y las clasifica por su geometria, sin depender de como se crearon:
+Al seleccionar una viga que ya tiene varillas, su armado se carga en la configuracion (corridos,
+bastones, piel y estribos) para verlo en la ventana como si se hubiera capturado y, si hace falta,
+corregirlo y volver a crearlo.
 
-- estribos: varillas con estilo Estribo/Atadura (o cerradas y cortas a lo largo de la viga);
-- longitudinales: superior / inferior / piel segun su altura dentro de la viga;
-  - corridas: las piezas de una misma linea (mismo tipo, misma posicion en la seccion) que juntas
-    cubren casi toda la viga (las piezas extra son traslapes);
-  - bastones: las demas, ubicadas sobre un apoyo (con su longitud a cada lado) o en un tramo.
+1. Si el armado lo creo esta herramienta y nadie lo ha cambiado, se recupera la configuracion EXACTA
+   con que se creo: se guarda en la viga (Extensible Storage) al pulsar OK.
+2. Si no (armado hecho a mano, editado o de una version anterior), se reconstruye de las varillas:
+   - estribos: estilo Estribo/Atadura (o cortos a lo largo de la viga) -> grupos por tramo n@sep;
+   - longitudinales: superior / inferior / piel por su altura. Las piezas de una misma linea se unen
+     aunque esten traslapadas y desfasadas (un diametro); las lineas que van de apoyo extremo a apoyo
+     extremo son corridos, las demas son bastones (INICIO / FINAL / CENTRO sobre apoyo / centro de
+     tramo), agrupados por posicion y longitud.
 
-Unidades del resultado: cm."""
+Unidades: cm."""
 from __future__ import division
-import math
+import json
 
+import System
 from Autodesk.Revit.DB import BuiltInParameter
 from Autodesk.Revit.DB.Structure import RebarHostData, RebarStyle, MultiplanarOption
 
+import bv_geom as G
 import bv_revit as R
 
 FT = R.FT
-COVER_FULL = 0.85            # una linea que cubre >= 85 % de la viga es corrida
 JOIN_TOL = 5.0               # cm: piezas de una misma linea que se tocan o traslapan
-POS_TOL = 2.0                # cm: misma posicion en la seccion
+SAME_LEN = 10.0              # cm: bastones del mismo grupo
+END_TOL = 15.0               # cm: una linea "llega" al extremo si queda a esto del pano interior del apoyo
+
+try:
+    from Autodesk.Revit.DB.ExtensibleStorage import SchemaBuilder, Schema, Entity, AccessLevel
+except Exception:            # pragma: no cover
+    SchemaBuilder = None
+
+SCHEMA_GUID = u'6f1d3c52-8a4e-4b1f-9c7e-2b5a7d0e4c31'
+SCHEMA_NAME = u'ArmadoVigaConfig'
 
 
-# ================================================================ util
+# ================================================================ configuracion guardada en la viga
+def _schema(create):
+    if SchemaBuilder is None:
+        return None
+    guid = System.Guid(SCHEMA_GUID)
+    sc = Schema.Lookup(guid)
+    if sc is not None or not create:
+        return sc
+    sb = SchemaBuilder(guid)
+    sb.SetReadAccessLevel(AccessLevel.Public)
+    sb.SetWriteAccessLevel(AccessLevel.Public)
+    sb.SetSchemaName(SCHEMA_NAME)
+    sb.SetDocumentation(u'Configuración con que la herramienta Armado de viga creó el armado')
+    sb.AddSimpleField(u'data', System.String)
+    return sb.Finish()
+
+
+def store_cfg(doc, info, cfg, created):
+    """Guarda en cada viga de la cadena la configuracion y las varillas creadas (dentro de la transaccion)."""
+    sc = _schema(True)
+    if sc is None:
+        return False
+    data = json.dumps({'cfg': cfg, 'rebars': sorted(R.eid_int(rb.Id) for rb in created),
+                       'beams': sorted(R.eid_int(c['elem'].Id) for c in info['chain'])}, ensure_ascii=False)
+    ok = False
+    for c in info['chain']:
+        try:
+            ent = Entity(sc)
+            ent.Set[System.String](u'data', data)
+            c['elem'].SetEntity(ent)
+            ok = True
+        except Exception:
+            pass
+    return ok
+
+
+def _stored(info):
+    sc = _schema(False)
+    if sc is None:
+        return None
+    for c in info['chain']:
+        try:
+            ent = c['elem'].GetEntity(sc)
+            if ent is None or not ent.IsValid():
+                continue
+            s = ent.Get[System.String](u'data')
+            if s:
+                return json.loads(s)
+        except Exception:
+            pass
+    return None
+
+
+# ================================================================ lectura de las varillas
 def _curves(rb, pos):
     try:
-        return list(rb.GetCenterlineCurves(False, False, False, MultiplanarOption.IncludeOnlyPlanarCurves, pos))
+        return list(rb.GetCenterlineCurves(False, False, True, MultiplanarOption.IncludeOnlyPlanarCurves, pos))
     except Exception:
         try:
-            return list(rb.GetCenterlineCurves(False, False, False))
+            return list(rb.GetCenterlineCurves(False, False, True))
         except Exception:
             return []
 
@@ -40,12 +107,15 @@ def _pts(curves):
     out = []
     for c in curves:
         try:
-            out.extend(list(c.Tessellate()))
+            q = list(c.Tessellate())
         except Exception:
             try:
-                out.extend([c.GetEndPoint(0), c.GetEndPoint(1)])
+                q = [c.GetEndPoint(0), c.GetEndPoint(1)]
             except Exception:
-                pass
+                q = []
+        if out and q and out[-1].DistanceTo(q[0]) < 1e-6:
+            q = q[1:]
+        out.extend(q)
     return out
 
 
@@ -65,24 +135,11 @@ def _positions(rb):
     return out or [0]
 
 
-def _quantity(rb, default):
-    try:
-        return int(rb.Quantity)
-    except Exception:
-        return default
-
-
 def _is_stirrup(doc, rb):
     try:
         sh = doc.GetElement(rb.GetShapeId())
         if sh is not None:
             return sh.RebarStyle == RebarStyle.StirrupTie
-    except Exception:
-        pass
-    try:
-        p = rb.get_Parameter(BuiltInParameter.REBAR_ELEM_HOOK_STYLE)
-        if p is not None:
-            return p.AsInteger() == int(RebarStyle.StirrupTie)
     except Exception:
         pass
     return None
@@ -96,39 +153,16 @@ def _comment(rb):
         return u''
 
 
-def _fmt(v):
-    s = u'%.0f' % v if abs(v - round(v)) < 0.05 or abs(v) >= 100 else u'%.1f' % v
-    return s
-
-
-def _merge(iv):
-    """Une intervalos [(a, b, ...)] que se tocan o traslapan; devuelve [(a, b, piezas)]."""
-    out = []
-    for a, b in sorted(iv):
-        if out and a <= out[-1][1] + JOIN_TOL:
-            out[-1][1] = max(out[-1][1], b)
-            out[-1][2] += 1
-        else:
-            out.append([a, b, 1])
-    return out
-
-
-# ================================================================ lectura
 class _Ctx(object):
     def __init__(self, info):
         self.info = info
         self.fr = info['frame']
         ax = info.get('axis') or {}
-        self.axis = None
         try:
             self.axis = R.Axis(self.fr, ax.get('runs') or [], ax.get('bends') or [], ax.get('s0', info['s_min']))
         except Exception:
             self.axis = None
-        self.L = info['L']
-        self.sup = sorted(info.get('supports') or [])
-        self.z_of = {}
-        for c in info['chain']:
-            self.z_of[R.eid_int(c['elem'].Id)] = (c['z0'], c['z1'])
+        self.z_of = dict((R.eid_int(c['elem'].Id), (c['z0'], c['z1'])) for c in info['chain'])
 
     def s_cm(self, p):
         s = self.fr.s(p)
@@ -145,30 +179,15 @@ class _Ctx(object):
     def zrange(self, host_id):
         return self.z_of.get(host_id, (self.info['z0'], self.info['z1']))
 
-    def where(self, a, b):
-        """Ubicacion de un baston: (texto, orden)."""
-        over = [q for q in self.sup if q[0] < b - 1.0 and q[1] > a + 1.0]
-        if over:
-            q = max(over, key=lambda q: min(b, q[1]) - max(a, q[0]))
-            left, right = q[0] - a, b - q[1]
-            txt = u'apoyo %s' % q[2]
-            parts = []
-            if left > 1.0:
-                parts.append(u'%s izq.' % _fmt(left))
-            if right > 1.0:
-                parts.append(u'%s der.' % _fmt(right))
-            if parts:
-                txt += u' (%s cm desde el paño)' % u' / '.join(parts)
-            return txt, (q[0] + q[1]) / 2.0
-        c = (a + b) / 2.0
-        k = sum(1 for q in self.sup if (q[0] + q[1]) / 2.0 < c)
-        if not self.sup or self.sup[0][0] > 5.0:
-            k += 1
-        return u'tramo T%d' % max(k, 1), c
+
+def _leg(p, q, ctx):
+    """Largo de la pata si el tramo p-q es vertical (cm), si no 0."""
+    dz = abs(q.Z - p.Z) * FT
+    return dz if dz > 3.0 and abs(ctx.s_cm(q) - ctx.s_cm(p)) < 1.0 else 0.0
 
 
 def read_existing(doc, info):
-    """Devuelve un dict con el armado existente o None si la viga no tiene varillas."""
+    """Varillas alojadas en la cadena: {'rebars', 'own', 'longs', 'stirrups'} o None si no hay."""
     ctx = _Ctx(info)
     seen = set()
     rebars = []
@@ -183,181 +202,297 @@ def read_existing(doc, info):
             pass
     if not rebars:
         return None
-    longs = []           # una entrada por varilla (posicion) longitudinal
-    stirrups = []        # una entrada por conjunto de estribos
-    own = 0
+    longs, stirrups, own = [], [], set()
     for rb in rebars:
         if _comment(rb).startswith(R.TAG):
-            own += 1
+            own.add(R.eid_int(rb.Id))
         bt = doc.GetElement(rb.GetTypeId())
         bname = R.el_name(bt) if bt is not None else u'?'
         try:
-            dn = R._bt_diams(bt)[1]
+            dm, dn = R._bt_diams(bt)
         except Exception:
-            dn = 0.0
+            dm = dn = 1.0
         try:
             host_id = R.eid_int(rb.GetHostId())
         except Exception:
             host_id = None
         z0, z1 = ctx.zrange(host_id)
-        h = max((z1 - z0) * FT, 1.0)
         poss = _positions(rb)
         first = _pts(_curves(rb, poss[0]))
-        if not first:
+        if len(first) < 2:
             continue
         ss = [ctx.s_cm(p) for p in first]
-        ext_s = max(ss) - min(ss)
         st = _is_stirrup(doc, rb)
         if st is None:
-            st = ext_s < 0.5 * h
+            st = max(ss) - min(ss) < 0.5 * (z1 - z0) * FT
         if st:
             last = _pts(_curves(rb, poss[-1])) if len(poss) > 1 else first
             s_a = sum(ss) / len(ss)
-            sl = [ctx.s_cm(p) for p in last]
-            s_b = sum(sl) / len(sl)
-            n = _quantity(rb, len(poss))
+            s_b = sum(ctx.s_cm(p) for p in last) / max(len(last), 1)
+            try:
+                n = int(rb.Quantity)
+            except Exception:
+                n = len(poss)
             ls = [ctx.l_cm(p) for p in first]
             zs = [p.Z * FT for p in first]
-            stirrups.append({'bt': bname, 'dn': dn, 'n': n, 's0': min(s_a, s_b), 's1': max(s_a, s_b),
+            stirrups.append({'bt': bname, 'dm': dm, 'n': n, 's0': min(s_a, s_b), 's1': max(s_a, s_b),
                              'sp': abs(s_b - s_a) / (n - 1) if n > 1 else 0.0,
-                             'b': max(ls) - min(ls) + dn, 'h': max(zs) - min(zs) + dn, 'id': R.eid_int(rb.Id)})
+                             'b': max(ls) - min(ls) + dm, 'h': max(zs) - min(zs) + dm})
             continue
         for i in poss:
             pts = first if i == poss[0] else _pts(_curves(rb, i))
-            if not pts:
+            if len(pts) < 2:
                 continue
             ss = [ctx.s_cm(p) for p in pts]
             a, b = min(ss), max(ss)
-            # la posicion en la seccion se toma en el tramo largo (sin las patas)
-            mid = [p for p, s in zip(pts, ss) if a + 0.25 * (b - a) <= s <= b - 0.25 * (b - a)] or pts
-            zc = sum(p.Z for p in mid) / len(mid)
-            lc = sum(ctx.l_cm(p) for p in mid) / len(mid)
+            # posicion en la seccion: centro del tramo mas largo a lo largo de la viga (sin patas ni ganchos)
+            k = max(range(len(pts) - 1), key=lambda j: abs(ss[j + 1] - ss[j]))
+            pm = [pts[k], pts[k + 1]]
+            zc = (pm[0].Z + pm[1].Z) / 2.0
             rel = (zc - z0) / max(z1 - z0, 1e-9)
-            layer = 'sup' if rel >= 0.6 else ('inf' if rel <= 0.4 else 'piel')
-            legs = any(abs(q.Z - p.Z) * FT > 3.0 and abs(ctx.s_cm(q) - ctx.s_cm(p)) < 1.0
-                       for p, q in zip(pts, pts[1:]))
-            longs.append({'bt': bname, 'dn': dn, 'layer': layer, 'l': lc, 'z': zc * FT, 'a': a, 'b': b,
-                          'legs': legs, 'id': R.eid_int(rb.Id)})
-    # ---- lineas: mismo lecho, tipo y posicion en la seccion
-    lines = []
-    for bar in longs:
-        for ln in lines:
-            if ln['layer'] == bar['layer'] and ln['bt'] == bar['bt'] and abs(ln['l'] - bar['l']) <= POS_TOL \
-                    and abs(ln['z'] - bar['z']) <= POS_TOL:
-                ln['bars'].append(bar)
-                break
-        else:
-            lines.append({'layer': bar['layer'], 'bt': bar['bt'], 'dn': bar['dn'], 'l': bar['l'], 'z': bar['z'],
-                          'bars': [bar]})
-    out = {'own': own, 'total': len(rebars), 'L': ctx.L, 'corr': {}, 'bast': [], 'stir': [], 'lines': lines}
-    for ln in lines:
-        runs = _merge([(b['a'], b['b']) for b in ln['bars']])
-        for a, b, npc in runs:
-            if b - a >= COVER_FULL * ctx.L:
-                key = (ln['layer'], ln['bt'])
-                d = out['corr'].setdefault(key, {'n': 0, 'laps': [], 'dn': ln['dn'], 'legs': False})
-                d['n'] += 1
-                d['laps'].append(npc - 1)
-                d['legs'] = d['legs'] or any(x['legs'] for x in ln['bars'])
+            # patas: al principio y al final de la polilinea, del lado de menor y mayor s
+            l_first, l_last = _leg(pts[0], pts[1], ctx), _leg(pts[-2], pts[-1], ctx)
+            if ss[0] <= ss[-1]:
+                leg0, leg1 = l_first, l_last
             else:
-                for x in ln['bars']:
-                    if x['a'] >= a - 0.1 and x['b'] <= b + 0.1:
-                        txt, order = ctx.where(x['a'], x['b'])
-                        out['bast'].append({'layer': ln['layer'], 'bt': ln['bt'], 'dn': ln['dn'], 'where': txt,
-                                            'order': order, 'len': x['b'] - x['a'], 'a': x['a'], 'b': x['b'],
-                                            'legs': x['legs']})
-    # bastones iguales en el mismo lugar se cuentan juntos
-    groups = {}
-    for x in out['bast']:
-        k = (x['layer'], x['bt'], x['where'], int(round(x['len'] / 5.0)))
-        g = groups.setdefault(k, dict(x, n=0))
-        g['n'] += 1
-    out['bast'] = sorted(groups.values(), key=lambda g: (g['layer'], g['order'], -g['dn']))
-    out['stir'] = sorted(stirrups, key=lambda s: s['s0'])
-    return out
+                leg0, leg1 = l_last, l_first
+            longs.append({'bt': bname, 'dm': dm, 'dn': dn,
+                          'layer': 'sup' if rel >= 0.75 else ('inf' if rel <= 0.25 else 'piel'),
+                          'l': (ctx.l_cm(pm[0]) + ctx.l_cm(pm[1])) / 2.0, 'z': zc * FT, 'a': a, 'b': b,
+                          'leg0': leg0, 'leg1': leg1})
+    return {'rebars': sorted(seen), 'own': own, 'longs': longs, 'stirrups': stirrups}
 
 
-# ================================================================ texto
-LAYERS = (('sup', u'Superior'), ('inf', u'Inferior'), ('piel', u'Piel / lateral'))
+# ================================================================ lineas (piezas traslapadas unidas)
+def _lines(longs):
+    """Une las piezas de una misma linea: mismo lecho y tipo, posicion en la seccion a menos de 1.6
+    diametros (el traslape desfasado o en bayoneta corre la pieza un diametro) y que se tocan o traslapan."""
+    lines = []
+    for p in sorted(longs, key=lambda q: q['a']):
+        tol = max(2.0, 1.6 * p['dm'])
+        best = None
+        for ln in lines:
+            q = ln['last']
+            if ln['layer'] != p['layer'] or ln['bt'] != p['bt'] or ln['b'] >= p['b'] - 1.0:
+                continue
+            if abs(q['l'] - p['l']) > tol or abs(q['z'] - p['z']) > tol or p['a'] > ln['b'] + JOIN_TOL:
+                continue
+            d = abs(q['l'] - p['l']) + abs(q['z'] - p['z'])
+            if best is None or d < best[0]:
+                best = (d, ln)
+        if best is not None:
+            ln = best[1]
+            ln['b'] = p['b']
+            ln['leg1'] = p['leg1']
+            ln['pieces'] += 1
+            ln['last'] = p
+        else:
+            lines.append({'layer': p['layer'], 'bt': p['bt'], 'dm': p['dm'], 'dn': p['dn'], 'a': p['a'],
+                          'b': p['b'], 'leg0': p['leg0'], 'leg1': p['leg1'], 'pieces': 1, 'last': p,
+                          'z': p['z']})
+    return lines
 
 
-def _laps_txt(laps):
-    if not any(laps):
-        return u''
-    if len(set(laps)) == 1:
-        return u'%d traslape%s c/u' % (laps[0], u's' if laps[0] > 1 else u'')
-    return u'%d traslapes en total' % sum(laps)
+def _median(v, default=0.0):
+    v = sorted(v)
+    return v[len(v) // 2] if v else default
 
 
-def _corr_txt(key, d):
-    t = u'%d %s corrida%s' % (d['n'], key[1], u's' if d['n'] > 1 else u'')
-    extra = []
-    if any(d['laps']):
-        extra.append(_laps_txt(d['laps']))
-    if d['legs']:
-        extra.append(u'con patas')
-    return t + (u' (%s)' % u', '.join(extra) if extra else u'')
+def _r(v, step=5.0):
+    return round(v / step) * step
 
 
-def _bast_txt(g):
-    return u'%d %s en %s, L = %s cm%s' % (g['n'], g['bt'], g['where'], _fmt(g['len']),
-                                         u' con patas' if g['legs'] else u'')
+def _most(items):
+    cnt = {}
+    for x in items:
+        cnt[x] = cnt.get(x, 0) + 1
+    return max(cnt.items(), key=lambda kv: kv[1])[0] if cnt else None
 
 
-def _stir_txt(s):
-    t = u'%d E%s' % (s['n'], s['bt'] if s['bt'].startswith(u'#') else u' ' + s['bt'])
-    if s['n'] > 1:
-        t += u' @ %s' % _fmt(s['sp'])
-    t += u' de %s a %s cm (%s × %s)' % (_fmt(s['s0']), _fmt(s['s1']), _fmt(s['b']), _fmt(s['h']))
-    return t
+# ================================================================ configuracion
+def _groups(sets, from_end):
+    """Conjuntos de estribos desde un pano -> '10@10,5@15'. Un conjunto de un solo estribo toma como
+    separacion la distancia al estribo anterior."""
+    out = []
+    prev = None
+    for s in sets:
+        near, far = (s['s1'], s['s0']) if from_end else (s['s0'], s['s1'])
+        if s['n'] > 1:
+            sp = s['sp']
+        else:
+            sp = abs(near - prev) if prev is not None else 10.0
+        out.append(u'%d@%s' % (s['n'], G.fcm_(round(max(sp, 1.0), 1))))
+        prev = far
+    return u','.join(out)
 
 
-def short_text(ex):
-    """Resumen corto para la ventana."""
+def to_cfg(ex, model, bts_list):
+    """Configuracion de la ventana que reproduce el armado leido. Devuelve (cfg, avisos)."""
+    cfg = G.fit_cfg({}, model, bts_list)
+    notes = []
+    nodes = model.nodes
+    ns = model.n_spans
+    inner = model.inner_supports
+    have = set(b['name'] for b in bts_list)
+    # ---- recubrimiento (de los estribos) y estribos
+    st = ex['stirrups']
+    if st:
+        cov = _median([(model.b - s['b']) / 2.0 for s in st] + [(model.h - s['h']) / 2.0 for s in st], 4.0)
+        if 1.5 <= cov <= 10.0:
+            cfg['cover'] = round(cov * 2.0) / 2.0
+        sbt = _most([s['bt'] for s in st])
+        if sbt in have:
+            cfg['stir_bt'] = sbt
+    cover = float(cfg['cover'])
+    stc = cfg['stirrups']
+    stc['on'] = bool(st)
+    if st:
+        stc['mode'] = 'groups'
+        firsts = []
+        for i in range(ns):
+            fa, fb = model.span_faces(i)
+            sets = sorted([s for s in st if fa - 1.0 <= (s['s0'] + s['s1']) / 2.0 <= fb + 1.0],
+                          key=lambda s: s['s0'])
+            # estribos dobles (perimetral + interior o dos traslapados): mismo arranque y cantidad
+            kept, double = [], 'none'
+            for s in sets:
+                twin = [k for k in kept if abs(k['s0'] - s['s0']) < 3.0 and k['n'] == s['n']]
+                if twin:
+                    double = 'inner' if abs(twin[0]['b'] - s['b']) > 3.0 else 'overlap'
+                    continue
+                kept.append(s)
+            sp_cfg = stc['spans'][i]
+            sp_cfg['double'] = double
+            tb = _most([s['bt'] for s in kept])
+            sp_cfg['bt'] = tb if (tb and tb != cfg['stir_bt'] and tb in have) else u''
+            g = stc['groups'][i]
+            if not kept:
+                g['left'], g['right'], g['mid'] = u'0', u'0', 0.0
+                continue
+            half = (fa + fb) / 2.0
+            mid = [s for s in kept if s['n'] > 1 and s['s0'] < half < s['s1']]
+            mid = max(mid, key=lambda s: s['s1'] - s['s0']) if mid else None
+            left = [s for s in kept if s is not mid and (s['s0'] + s['s1']) / 2.0 < half]
+            right = [s for s in kept if s is not mid and (s['s0'] + s['s1']) / 2.0 >= half]
+            if left:
+                firsts.append(left[0]['s0'] - fa)
+            if right:
+                firsts.append(fb - right[-1]['s1'])
+            g['left'] = _groups(left, False) if left else u'0'
+            g['right'] = _groups(list(reversed(right)), True) if right else u'0'
+            g['mid'] = round(mid['sp'], 1) if mid else (round(max(s['sp'] for s in kept), 1) or 20.0)
+        if firsts:
+            stc['first'] = max(round(_median(firsts) * 2.0) / 2.0, 0.0)
+    # ---- longitudinales
+    lines = _lines(ex['longs'])
+    n0, n1 = nodes[0], nodes[-1]
+    lo_end = n0.s1 + END_TOL if not n0.free else END_TOL
+    hi_end = n1.s0 - END_TOL if not n1.free else model.L - END_TOL
+    full = [ln for ln in lines if ln['a'] <= lo_end and ln['b'] >= hi_end]
+    part = [ln for ln in lines if ln not in full]
+    for lay, key in (('sup', 'top'), ('inf', 'bot')):
+        fl = [ln for ln in full if ln['layer'] == lay]
+        c = cfg[key + '_single']
+        cfg[key + '_style'] = 'single'
+        if not fl:
+            c['n'] = 0
+            continue
+        bt = _most([ln['bt'] for ln in fl])
+        sel = [ln for ln in fl if ln['bt'] == bt]
+        c['bt'] = bt if bt in have else c['bt']
+        c['n'] = len(sel)
+        c['La'] = _r(_median([ln['leg0'] for ln in sel]))
+        c['Lb'] = _r(_median([ln['leg1'] for ln in sel]))
+        c['Lna'] = c['Lnb'] = 0.0
+        others = [ln for ln in fl if ln['bt'] != bt]
+        if others:
+            notes.append(u'Corridos %s: también hay %s; se cargaron como %d %s'
+                         % (u'superiores' if lay == 'sup' else u'inferiores',
+                            u', '.join(u'%d %s' % (sum(1 for x in others if x['bt'] == n), n)
+                                       for n in sorted(set(x['bt'] for x in others))), len(sel), bt))
+        laps = max(ln['pieces'] for ln in sel) - 1
+        if laps > 0:
+            notes.append(u'Corridos %s con traslapes: se recalculan con la longitud comercial / posiciones '
+                         u'de Configuración' % (u'superiores' if lay == 'sup' else u'inferiores'))
+    # ---- bastones
+    for lay, key in (('sup', 'top_add'), ('inf', 'bot_add')):
+        add = G.add_default(model)
+        groups = {}
+        for ln in [x for x in part if x['layer'] == lay]:
+            a, b = ln['a'], ln['b']
+            if a <= lo_end:
+                k = ('start', 0)
+                d = {'L': b - n0.s1, 'La': ln['leg0'], 'Ln': max(model.anchor_start(n0, cover) - a, 0.0)}
+            elif b >= hi_end:
+                k = ('end', 0)
+                d = {'L': n1.s0 - a, 'La': ln['leg1'], 'Ln': max(b - model.anchor_end(n1, cover), 0.0)}
+            else:
+                over = [j for j, ni in enumerate(inner) if a < nodes[ni].s1 - 1.0 and b > nodes[ni].s0 + 1.0]
+                if over:
+                    j = max(over, key=lambda j: min(b, nodes[inner[j]].s1) - max(a, nodes[inner[j]].s0))
+                    m = nodes[inner[j]].mid
+                    k = ('mid', j)
+                    d = {'L1': m - a, 'L2': b - m}
+                else:
+                    c = (a + b) / 2.0
+                    i = max([i for i in range(ns) if model.span_faces(i)[0] <= c] or [0])
+                    fa, fb = model.span_faces(i)
+                    m = (fa + fb) / 2.0
+                    k = ('span', i)
+                    d = {'L1': m - a, 'L2': b - m}
+            d = dict((kk, _r(v)) for kk, v in d.items())
+            gk = k + (ln['bt'],) + tuple(sorted(d.items()))
+            g = groups.setdefault(gk, dict(d, bt=ln['bt'], n=0))
+            g['n'] += 1
+        for gk, g in sorted(groups.items(), key=lambda kv: -kv[1]['n']):
+            where, j = gk[0], gk[1]
+            if g['bt'] not in have:
+                continue
+            ly = dict(g)
+            if where in ('start', 'end'):
+                add[where].append(ly)
+            else:
+                add[where][j].append(ly)
+        cfg[key] = add
+    # ---- piel
+    side = [ln for ln in lines if ln['layer'] == 'piel']
+    sd = cfg['side_single']
+    cfg['side_style'] = 'single'
+    sd['on'] = bool(side)
+    if side:
+        bt = _most([ln['bt'] for ln in side])
+        sd['bt'] = bt if bt in have else sd['bt']
+        zs = []
+        for z in sorted(ln['z'] for ln in side):
+            if not zs or z - zs[-1] > 3.0:
+                zs.append(z)
+        sd['rows'] = max(1, min(len(zs), G.SIDE_ROWS_MAX))
+        if any(ln not in full for ln in side):
+            notes.append(u'Piel: no toda corre de extremo a extremo; se cargó como piel corrida')
+    return cfg, notes
+
+
+# ================================================================ entrada
+def existing_cfg(doc, info, model, bts_list):
+    """(cfg, texto) del armado que ya tiene la viga, o (None, texto) si no tiene."""
+    ex = read_existing(doc, info)
     if not ex:
-        return u'Armado existente: ninguno.'
-    lines = [u'Armado existente (%d elemento(s) de armadura, %d de esta herramienta):' % (ex['total'], ex['own'])]
-    for lay, name in LAYERS:
-        items = [_corr_txt(k, d) for k, d in sorted(ex['corr'].items(), key=lambda kv: -kv[1]['dn'])
-                 if k[0] == lay]
-        items += [_bast_txt(g) for g in ex['bast'] if g['layer'] == lay]
-        if items:
-            lines.append(u'  %s: %s' % (name, u' · '.join(items)))
-    if ex['stir']:
-        lines.append(u'  Estribos: %s' % u' · '.join(_stir_txt(s) for s in ex['stir']))
-    return u'\n'.join(lines)
-
-
-def print_report(ex, label, out):
-    """Reporte detallado en la ventana de salida de pyRevit."""
-    out.print_md(u'## Armado existente de la viga %s' % label)
-    if not ex:
-        out.print_md(u'La viga no tiene varillas alojadas.')
-        return
-    out.print_md(u'**Longitud de la viga:** %s cm · **elementos de armadura:** %d (%d creados con esta herramienta)'
-                 % (_fmt(ex['L']), ex['total'], ex['own']))
-    rows = []
-    for lay, name in LAYERS:
-        for k, d in sorted(ex['corr'].items(), key=lambda kv: -kv[1]['dn']):
-            if k[0] == lay:
-                rows.append([name, u'Corrida', k[1], str(d['n']), u'toda la viga',
-                             _laps_txt(d['laps']) or u'-',
-                             u'sí' if d['legs'] else u'no'])
-        for g in ex['bast']:
-            if g['layer'] == lay:
-                rows.append([name, u'Bastón', g['bt'], str(g['n']), g['where'],
-                             u'L = %s (de %s a %s)' % (_fmt(g['len']), _fmt(g['a']), _fmt(g['b'])),
-                             u'sí' if g['legs'] else u'no'])
-    if rows:
-        out.print_md(u'### Varillas longitudinales')
-        out.print_table(rows, columns=[u'Lecho', u'Tipo', u'Varilla', u'Cant.', u'Ubicación', u'Longitud (cm)',
-                                       u'Patas'])
-    if ex['stir']:
-        out.print_md(u'### Estribos')
-        out.print_table([[s['bt'], str(s['n']), _fmt(s['sp']) if s['n'] > 1 else u'-', _fmt(s['s0']), _fmt(s['s1']),
-                          u'%s × %s' % (_fmt(s['b']), _fmt(s['h']))] for s in ex['stir']],
-                        columns=[u'Varilla', u'Cant.', u'Separación (cm)', u'Desde (cm)', u'Hasta (cm)',
-                                 u'Tamaño ext. b × h (cm)'])
-    out.print_md(u'_Posiciones medidas a lo largo de la viga desde su extremo inicial. Las corridas se '
-                 u'reconocen por cubrir al menos el %d %% de la viga; las demás piezas se reportan como '
-                 u'bastones._' % int(COVER_FULL * 100))
+        return None, u''
+    nrb = len(ex['rebars'])
+    data = _stored(info)
+    if data and set(data.get('rebars') or []) == set(ex['rebars']) == ex['own'] and \
+            set(data.get('beams') or []) == set(R.eid_int(c['elem'].Id) for c in info['chain']):
+        try:
+            cfg = G.fit_cfg(data['cfg'], model, bts_list)
+            return cfg, (u'Armado existente (%d elementos de armadura): se cargó en la configuración tal como '
+                         u'se creó con esta herramienta.' % nrb)
+        except Exception:
+            pass
+    cfg, notes = to_cfg(ex, model, bts_list)
+    why = u'hecho o editado fuera de esta herramienta' if ex['own'] != set(ex['rebars']) or data \
+        else u'creado con una versión anterior'
+    txt = (u'Armado existente (%d elementos de armadura, %s): se reconstruyó de las varillas y se cargó en '
+           u'la configuración; revíselo antes de pulsar OK.' % (nrb, why))
+    for n in notes:
+        txt += u'\nAviso: ' + n
+    return cfg, txt

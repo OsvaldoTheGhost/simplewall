@@ -1830,7 +1830,11 @@ class BeamRebarWindow(forms.WPFWindow):
         self.ctx = ctx
         self.model = ctx['model']
         self.templates = ctx.get('templates', self.templates)
-        self.cfg = G.fit_cfg(self.cfg, self.model, self.bts_list)
+        # la viga ya tiene armado: se carga el suyo; si no, se conserva la configuracion actual
+        self.cfg = G.fit_cfg(ctx.get('cfg') or self.cfg, self.model, self.bts_list)
+        if not self.cfg['stirrups'].get('hook') and self.hooks:
+            h = [x for x in self.hooks if abs(x['angle'] - 135.0) < 1.0]
+            self.cfg['stirrups']['hook'] = (h[0] if h else self.hooks[0])['name']
         self.cur_span = 0
         self.cur_loc = {'T': 0, 'B': 0}
         for p in self.layer_sel:
