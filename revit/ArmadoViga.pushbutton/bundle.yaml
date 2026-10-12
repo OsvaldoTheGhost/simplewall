@@ -1,0 +1,8 @@
+title: "Armado\nViga"
+tooltip: >-
+  Arma una viga o una viga continua (varias vigas seguidas): corridos superiores e inferiores,
+  bastones al inicio/centro/final por capas, barra central, estribos por zonas y vistas de
+  elevación y cortes. Permite guardar e importar configuraciones. Interfaz tipo VBAR.
+  Ventana no modal: OK crea el armado sin cerrarla; Seleccionar cambia de elemento y Actualizar
+  relee la geometría.
+author: Osvaldo

@@ -1,0 +1,972 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Armado de viga" Width="1180" Height="840" MinWidth="1000" MinHeight="720"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="False" Background="#202023" Foreground="#E6E6E6"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True">
+  <Window.Resources>
+    <SolidColorBrush x:Key="CtlBg" Color="#1E1E1E"/>
+    <SolidColorBrush x:Key="CtlBorder" Color="#555558"/>
+    <SolidColorBrush x:Key="Accent" Color="#3DA5F5"/>
+
+    <Style x:Key="Lbl" TargetType="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="#1E1E1E"/>
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="CaretBrush" Value="#E6E6E6"/>
+      <Setter Property="SelectionBrush" Value="#3DA5F5"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Padding" Value="3,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Botones -->
+    <Style x:Key="IconBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="IconToggle" TargetType="ToggleButton">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="BorderBrush" Value="#555558"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#24527D"/>
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="SpinBtn" TargetType="RepeatButton">
+      <Setter Property="Foreground" Value="#CFCFCF"/>
+      <Setter Property="Background" Value="#3A3A3D"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="#555558" BorderThickness="1">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="OkBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#3A7BD5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#4C8FE8"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2C63B0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="CloseBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#C42B1C"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- ComboBox oscuro -->
+    <ControlTemplate x:Key="CbToggle" TargetType="ToggleButton">
+      <Border x:Name="bd" Background="#1E1E1E" BorderBrush="#555558" BorderThickness="1" CornerRadius="2">
+        <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,7,0"
+              Data="M0,0 L4,4 L8,0" Stroke="#CFCFCF" StrokeThickness="1.4"/>
+      </Border>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+        </Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="ComboBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="SnapsToDevicePixels" Value="True"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton Template="{StaticResource CbToggle}" Focusable="False" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+              <ContentPresenter IsHitTestVisible="False" Margin="6,0,22,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
+                     Focusable="False" PopupAnimation="Fade">
+                <Border Background="#2B2B2D" BorderBrush="#555558" BorderThickness="1"
+                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="bd" Background="Transparent" Padding="7,3">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#24527D"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#1C3F60"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    
+    <SolidColorBrush x:Key="PageBg" Color="#27272A"/>
+
+    <Style x:Key="Grp" TargetType="GroupBox">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Margin" Value="4,0,4,4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="GroupBox">
+            <Grid>
+              <Border Margin="0,8,0,0" BorderBrush="#5A5A5E" BorderThickness="1" CornerRadius="3">
+                <ContentPresenter Margin="8,14,8,8"/>
+              </Border>
+              <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,0,0,0" Padding="4,0"
+                      Background="#27272A">
+                <ContentPresenter ContentSource="Header" TextElement.FontWeight="SemiBold"
+                                  TextElement.FontSize="11" TextElement.Foreground="#E6E6E6"/>
+              </Border>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="NavBtn" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                    CornerRadius="3" Padding="6,5">
+              <Grid>
+                <Border x:Name="acc" Width="3" HorizontalAlignment="Left" Background="#3DA5F5"
+                        Margin="-6,-5,0,-5" Visibility="Hidden" CornerRadius="3,0,0,3"/>
+                <ContentPresenter VerticalAlignment="Center"/>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#303034"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#3A3A3F"/>
+                <Setter TargetName="bd" Property="BorderBrush" Value="#6A6A70"/>
+                <Setter TargetName="acc" Property="Visibility" Value="Visible"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="BlueBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#3A7BD5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="10,0">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#4C8FE8"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2C63B0"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bd" Property="Background" Value="#4A4A4E"/>
+                <Setter Property="Foreground" Value="#8A8A8A"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="GrayBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="#E6E6E6"/>
+      <Setter Property="Background" Value="#48484C"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="8,0"
+                    BorderBrush="#5E5E62" BorderThickness="1">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#3DA5F5"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bd" Property="Background" Value="#2A5C8A"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Unit" TargetType="TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="4,0,10,0"/>
+      <Setter Property="Foreground" Value="#A8A8A8"/>
+    </Style>
+    <Style x:Key="Hint" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="#8C8C8C"/>
+      <Setter Property="FontStyle" Value="Italic"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+  </Window.Resources>
+
+  <Border BorderBrush="#3F3F46" BorderThickness="1">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="34"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="250"/>
+        <RowDefinition Height="50"/>
+      </Grid.RowDefinitions>
+
+      <!-- Barra de titulo -->
+      <Border x:Name="titleBar" Grid.Row="0" Background="#1B1B1D">
+        <Grid>
+          <TextBlock Tag="t:title" Text="ARMADO DE VIGA" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontWeight="SemiBold" FontSize="13" IsHitTestVisible="False"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0">
+            <ComboBox x:Name="cbLang" Width="64" Margin="0,0,8,0"/>
+            <Button x:Name="btnClose" Style="{StaticResource CloseBtn}" Width="34" Height="28" Content="✕" FontSize="14"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Cuerpo superior -->
+      <Grid Grid.Row="1" Margin="8,8,8,4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="200"/>
+          <ColumnDefinition Width="8"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="#27272A" BorderBrush="#5A5A5E" BorderThickness="1" CornerRadius="3" Padding="8">
+          <StackPanel>
+            
+          <RadioButton x:Name="nav0" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Ellipse Canvas.Left="4" Canvas.Top="2" Width="16" Height="16" Stroke="#CFCFCF" StrokeThickness="1.5"/><Ellipse Canvas.Left="9" Canvas.Top="7" Width="6" Height="6" Fill="#3DA5F5"/><Path Stroke="#CFCFCF" StrokeThickness="1.5" Data="M12,0 L12,3 M12,17 L12,20 M2,10 L5,10 M19,10 L22,10"/></Canvas>
+              <TextBlock Tag="t:n_cfg" Text="Configuración" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="nav1" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Rectangle Canvas.Left="2" Canvas.Top="1" Width="20" Height="18" Stroke="#CFCFCF" StrokeThickness="1.2"/><Path Fill="#3DA5F5" Data="M5,4 h3 v3 h-3 Z M10.5,4 h3 v3 h-3 Z M16,4 h3 v3 h-3 Z M5,13 h3 v3 h-3 Z M10.5,13 h3 v3 h-3 Z M16,13 h3 v3 h-3 Z"/></Canvas>
+              <TextBlock Tag="t:n_main" Text="Barras principales" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="nav2" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Rectangle Canvas.Left="1" Canvas.Top="3" Width="22" Height="14" Stroke="#CFCFCF" StrokeThickness="1.2"/><Line X1="3" Y1="6.5" X2="21" Y2="6.5" Stroke="#3DA5F5" StrokeThickness="2"/></Canvas>
+              <TextBlock Tag="t:n_top" Text="Refuerzo superior" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="nav3" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Rectangle Canvas.Left="1" Canvas.Top="3" Width="22" Height="14" Stroke="#CFCFCF" StrokeThickness="1.2"/><Line X1="3" Y1="13.5" X2="21" Y2="13.5" Stroke="#3DA5F5" StrokeThickness="2"/></Canvas>
+              <TextBlock Tag="t:n_bot" Text="Refuerzo inferior" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="nav4" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Rectangle Canvas.Left="1" Canvas.Top="3" Width="22" Height="14" Stroke="#CFCFCF" StrokeThickness="1.2"/><Path Stroke="#4DD0E1" StrokeThickness="2" Data="M3,10 C8,4 12,16 21,10"/></Canvas>
+              <TextBlock Tag="t:n_side" Text="Barra central" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          <RadioButton x:Name="nav5" GroupName="nav" Style="{StaticResource NavBtn}">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="24" Height="20" Margin="0,0,8,0"><Rectangle Canvas.Left="5" Canvas.Top="1" Width="14" Height="18" RadiusX="2" RadiusY="2" Stroke="#7CC576" StrokeThickness="1.8"/><Line X1="7" Y1="3" X2="12" Y2="8" Stroke="#7CC576" StrokeThickness="1.6"/></Canvas>
+              <TextBlock Tag="t:n_stir" Text="Estribos" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </StackPanel>
+          </RadioButton>
+          </StackPanel>
+        </Border>
+
+        <Border Grid.Column="2" Background="#27272A" BorderBrush="#5A5A5E" BorderThickness="1" CornerRadius="3" Padding="4">
+          <Grid x:Name="pages">
+
+            <!-- 0: Configuracion -->
+            <Grid x:Name="pg0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <GroupBox Grid.Column="0" Style="{StaticResource Grp}" Header="PARÁMETROS DE ARMADO" Tag="t:g_params">
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/><RowDefinition Height="*"/>
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="110"/><ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Row="0" Style="{StaticResource Lbl}" Tag="t:stir_dia" Text="Ø Estribo"/>
+                  <ComboBox x:Name="cbStirBt" Grid.Row="0" Grid.Column="1" Width="150" HorizontalAlignment="Left"/>
+                  <TextBlock Grid.Row="1" Style="{StaticResource Lbl}" Tag="t:cover" Text="Recubrimiento"/>
+                  <ComboBox x:Name="cbCover" Grid.Row="1" Grid.Column="1" Width="150" HorizontalAlignment="Left"/>
+                  <TextBlock Grid.Row="2" Style="{StaticResource Lbl}" Text="t min"/>
+                  <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTmin" Width="52" Text="0.03" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+                  <TextBlock Grid.Row="3" Style="{StaticResource Lbl}" Tag="t:partition" Text="Partición"/>
+                  <TextBox x:Name="tbPartition" Grid.Row="3" Grid.Column="1" Width="150" HorizontalAlignment="Left"/>
+                  <Border Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0" Background="#1F1F22" BorderBrush="#4A4A4E" BorderThickness="1">
+                    <Canvas x:Name="secCanvas0" ClipToBounds="True"/>
+                  </Border>
+                </Grid>
+              </GroupBox>
+              <GroupBox Grid.Column="1" Style="{StaticResource Grp}" Header="CREACIÓN DE VISTAS" Tag="t:g_views">
+                <StackPanel>
+                  <CheckBox x:Name="chkElev" Content="Crear una vista en elevación" Tag="t:mk_elev" Margin="0,2,0,6"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:template" Text="Plantilla" Width="70"/>
+                    <ComboBox x:Name="cbElevTpl" Width="260"/>
+                  </StackPanel>
+                  <CheckBox x:Name="chkCross" Content="Crear cortes transversales (centro de cada tramo)" Tag="t:mk_cross" Margin="0,2,0,6"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:template" Text="Plantilla" Width="70"/>
+                    <ComboBox x:Name="cbCrossTpl" Width="260"/>
+                  </StackPanel>
+                  <CheckBox x:Name="chkReplace" IsChecked="True" Tag="t:replace"
+                            Content="Reemplazar el armado creado antes con esta herramienta" Margin="0,2,0,8"/>
+                  <Border Height="1" Background="#3F3F46" Margin="0,0,0,6"/>
+                  <TextBlock Tag="t:laps_hdr" Text="TRASLAPES" FontWeight="SemiBold" Foreground="#A8A8A8" Margin="0,0,0,4"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:lap" Text="Traslape (× db)"/>
+                    <TextBox x:Name="tbLap" Width="40" Text="40" VerticalAlignment="Center"/>
+                    <CheckBox x:Name="chkStock" Tag="t:stock" Content="Long. comercial máx." IsChecked="True" Margin="14,0,6,0" VerticalAlignment="Center"/>
+                    <TextBox x:Name="tbStock" Width="44" Text="12" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource Unit}" Text="m"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:lap_style" Text="Unión"/>
+                    <ComboBox x:Name="cbLapStyle" Width="250" VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Lbl}" Tag="t:lap_pos_top" Text="Traslapes lecho superior (m desde el inicio, separados por coma)"/>
+                  <TextBox x:Name="tbLapPosTop" Margin="0,2,0,5"/>
+                  <TextBlock Style="{StaticResource Lbl}" Tag="t:lap_pos_bot" Text="Traslapes lecho inferior (m desde el inicio)"/>
+                  <TextBox x:Name="tbLapPosBot" Margin="0,2,0,5"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:joint_L" Text="Cambio de sección: anclaje recto"/>
+                    <TextBox x:Name="tbJointL" Width="44" Text="1.00" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource Unit}" Text="m"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:axis_mode" Text="Cambio de eje en apoyos"/>
+                    <ComboBox x:Name="cbAxisMode" Width="210" VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <Border Height="1" Background="#3F3F46" Margin="0,0,0,8"/>
+                  <TextBlock x:Name="txtBeamInfo" Foreground="#CFCFCF" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="txtSummary" Foreground="#A8A8A8" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
+              </GroupBox>
+            </Grid>
+
+            <!-- 1: Barras principales -->
+            <Grid x:Name="pg1" Visibility="Collapsed">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <GroupBox Grid.Row="0" Grid.Column="0" Style="{StaticResource Grp}" Header="BARRA PRINCIPAL SUPERIOR" Tag="t:g_top_main">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:top_style" Text="Estilo de barra superior"/>
+                    <ComboBox x:Name="cbTopStyle" Width="170"/>
+                  </StackPanel>
+                  <TextBlock x:Name="txtTopSingle" DockPanel.Dock="Top" Style="{StaticResource Hint}" Tag="t:top_single_hint"
+                             Text="Una sola varilla corrida de extremo a extremo de la viga."/>
+                  <Border x:Name="tblTopMain" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22"/>
+                </DockPanel>
+              </GroupBox>
+              <GroupBox Grid.Row="0" Grid.Column="1" Style="{StaticResource Grp}" Header="BARRA PRINCIPAL INFERIOR" Tag="t:g_bot_main">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Style="{StaticResource Lbl}" Tag="t:bot_style" Text="Estilo de barra inferior"/>
+                    <ComboBox x:Name="cbBotStyle" Width="170"/>
+                  </StackPanel>
+                  <TextBlock x:Name="txtBotSingle" DockPanel.Dock="Top" Style="{StaticResource Hint}" Tag="t:top_single_hint"
+                             Text="Una sola varilla corrida de extremo a extremo de la viga."/>
+                  <Border x:Name="tblBotMain" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22"/>
+                </DockPanel>
+              </GroupBox>
+              <Grid Grid.Row="1" Grid.Column="0">
+      <GroupBox x:Name="gbTopCfg" Style="{StaticResource Grp}" Header="Configuración de barra superior" Tag="t:g_top_cfg">
+        <StackPanel>
+          <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="6" Canvas.Top="8" Width="218" Height="46" Stroke="#555558"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M14,50 L14,16 L216,16 L216,50"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M4,4 L14,4 M4,1 L4,7 M14,1 L14,7"/><TextBlock Canvas.Left="3" Canvas.Top="-2" Text="Ln*" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M216,4 L226,4 M216,1 L216,7 M226,1 L226,7"/><TextBlock Canvas.Left="215" Canvas.Top="-2" Text="Lnᵇ" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="18" Canvas.Top="22" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><TextBlock Canvas.Left="200" Canvas.Top="22" Text="Lb" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock></Canvas>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbTopBt" Width="150"/>
+            <TextBlock Style="{StaticResource Lbl}" Margin="16,0,6,0" Text="n ="/>
+            <ComboBox x:Name="cbTopN" Width="56"/>
+          </StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTopLa" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Lbl}" Text="Lb ="/>
+            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTopLb" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln* ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTopLna" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Lnᵇ ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTopLnb" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#F0A030" Text="Anc.* ="/>
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTopLj0" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Lbl}" Foreground="#F0A030" Text="Ancᵇ ="/>
+            <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTopLj1" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+          </Grid>
+          <Button x:Name="btnTopAll" Style="{StaticResource GrayBtn}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                  Content="Aplicar a todos los tramos" Tag="t:apply_all"/>
+        </StackPanel>
+      </GroupBox></Grid>
+              <Grid Grid.Row="1" Grid.Column="1">
+      <GroupBox x:Name="gbBotCfg" Style="{StaticResource Grp}" Header="Configuración de barra inferior" Tag="t:g_bot_cfg">
+        <StackPanel>
+          <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="6" Canvas.Top="8" Width="218" Height="46" Stroke="#555558"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M14,12 L14,46 L216,46 L216,12"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M4,60 L14,60 M4,57 L4,63 M14,57 L14,63"/><TextBlock Canvas.Left="3" Canvas.Top="44" Text="Ln*" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M216,60 L226,60 M216,57 L216,63 M226,57 L226,63"/><TextBlock Canvas.Left="215" Canvas.Top="44" Text="Lnᵇ" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="18" Canvas.Top="18" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><TextBlock Canvas.Left="200" Canvas.Top="18" Text="Lb" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock></Canvas>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbBotBt" Width="150"/>
+            <TextBlock Style="{StaticResource Lbl}" Margin="16,0,6,0" Text="n ="/>
+            <ComboBox x:Name="cbBotN" Width="56"/>
+          </StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBotLa" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Lbl}" Text="Lb ="/>
+            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBotLb" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln* ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBotLna" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Lnᵇ ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBotLnb" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#F0A030" Text="Anc.* ="/>
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBotLj0" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Lbl}" Foreground="#F0A030" Text="Ancᵇ ="/>
+            <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBotLj1" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+          </Grid>
+          <Button x:Name="btnBotAll" Style="{StaticResource GrayBtn}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                  Content="Aplicar a todos los tramos" Tag="t:apply_all"/>
+        </StackPanel>
+      </GroupBox></Grid>
+            </Grid>
+
+            <!-- 2: Refuerzo superior -->
+            <Grid x:Name="pg2" Visibility="Collapsed">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid Grid.Column="0">
+      <GroupBox x:Name="gbTs" Style="{StaticResource Grp}" Header="INICIO" Tag="t:g_start">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlTs" Grid.Row="0">
+            
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="6" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M12,50 L12,16 L170,16"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M2,6 L12,6 M2,3 L2,9 M12,3 L12,9"/><TextBlock Canvas.Left="1" Canvas.Top="-8" Text="Ln" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M32,6 L170,6 M32,3 L32,9 M170,3 L170,9"/><TextBlock Canvas.Left="95" Canvas.Top="-8" Text="L" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="16" Canvas.Top="22" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><Line X1="32" Y1="30" X2="220" Y2="30" Stroke="#555558" StrokeDashArray="4,3"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbTsBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbTsN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTsLn" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTsLa" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Text="L ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTsL" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnTsAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnTsDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblTs" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+              <Grid Grid.Column="1">
+      <GroupBox x:Name="gbTm" Style="{StaticResource Grp}" Header="CENTRO" Tag="t:g_mid">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlTm" Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"><TextBlock Style="{StaticResource Lbl}" Tag="t:location" Text="Ubicación"/><ComboBox x:Name="cbTmSup" Width="150"/></StackPanel><TextBlock x:Name="txtTmNone" Style="{StaticResource Hint}" Tag="t:no_inner" Text="Sin apoyos intermedios (viga de un tramo)." Margin="0,0,0,6" Visibility="Collapsed"/>
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle x:Name="shpTmSup" Canvas.Left="102" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#6A6A6A" StrokeThickness="0.8" StrokeDashArray="6,2,1,2" Data="M115,0 L115,64"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M30,16 L200,16"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M30,6 L115,6 M30,3 L30,9 M115,3 L115,9"/><TextBlock Canvas.Left="64" Canvas.Top="-8" Text="L1" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M115,6 L200,6 M200,3 L200,9"/><TextBlock Canvas.Left="150" Canvas.Top="-8" Text="L2" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock x:Name="txtTmAxis" Canvas.Left="118" Canvas.Top="46" Text="eje" Foreground="#6A6A6A" FontSize="10"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbTmBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbTmN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Text="L1 ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTmL1" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Lbl}" Text="L2 ="/>
+            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTmL2" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnTmAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnTmDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblTm" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+              <Grid Grid.Column="2">
+      <GroupBox x:Name="gbTe" Style="{StaticResource Grp}" Header="FINAL" Tag="t:g_end">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlTe" Grid.Row="0">
+            
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="198" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M60,16 L218,16 L218,50"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M218,6 L228,6 M218,3 L218,9 M228,3 L228,9"/><TextBlock Canvas.Left="217" Canvas.Top="-8" Text="Ln" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M60,6 L198,6 M60,3 L60,9 M198,3 L198,9"/><TextBlock Canvas.Left="123" Canvas.Top="-8" Text="L" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="202" Canvas.Top="22" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><Line X1="10" Y1="30" X2="198" Y2="30" Stroke="#555558" StrokeDashArray="4,3"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbTeBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbTeN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTeLn" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbTeLa" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Text="L ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbTeL" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnTeAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnTeDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblTe" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+            </Grid>
+
+            <!-- 3: Refuerzo inferior -->
+            <Grid x:Name="pg3" Visibility="Collapsed">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid Grid.Column="0">
+      <GroupBox x:Name="gbBs" Style="{StaticResource Grp}" Header="INICIO" Tag="t:g_start">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlBs" Grid.Row="0">
+            
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="6" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M12,14 L12,48 L170,48"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M2,6 L12,6 M2,3 L2,9 M12,3 L12,9"/><TextBlock Canvas.Left="1" Canvas.Top="-8" Text="Ln" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M32,6 L170,6 M32,3 L32,9 M170,3 L170,9"/><TextBlock Canvas.Left="95" Canvas.Top="-8" Text="L" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="16" Canvas.Top="22" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><Line X1="32" Y1="34" X2="220" Y2="34" Stroke="#555558" StrokeDashArray="4,3"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbBsBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbBsN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBsLn" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBsLa" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Text="L ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBsL" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnBsAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnBsDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblBs" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+              <Grid Grid.Column="1">
+      <GroupBox x:Name="gbBm" Style="{StaticResource Grp}" Header="CENTRO" Tag="t:g_mid">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlBm" Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6"><TextBlock Style="{StaticResource Lbl}" Tag="t:location" Text="Ubicación"/><ComboBox x:Name="cbBmSup" Width="150"/></StackPanel><TextBlock x:Name="txtBmNone" Style="{StaticResource Hint}" Tag="t:no_inner" Text="Sin apoyos intermedios (viga de un tramo)." Margin="0,0,0,6" Visibility="Collapsed"/>
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle x:Name="shpBmSup" Canvas.Left="102" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#6A6A6A" StrokeThickness="0.8" StrokeDashArray="6,2,1,2" Data="M115,0 L115,64"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M30,48 L200,48"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M30,6 L115,6 M30,3 L30,9 M115,3 L115,9"/><TextBlock Canvas.Left="64" Canvas.Top="-8" Text="L1" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M115,6 L200,6 M200,3 L200,9"/><TextBlock Canvas.Left="150" Canvas.Top="-8" Text="L2" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock x:Name="txtBmAxis" Canvas.Left="118" Canvas.Top="46" Text="eje" Foreground="#6A6A6A" FontSize="10"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbBmBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbBmN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Text="L1 ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBmL1" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Lbl}" Text="L2 ="/>
+            <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBmL2" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnBmAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnBmDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblBm" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+              <Grid Grid.Column="2">
+      <GroupBox x:Name="gbBe" Style="{StaticResource Grp}" Header="FINAL" Tag="t:g_end">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="pnlBe" Grid.Row="0">
+            
+            <TextBlock Tag="t:layer" Text="Capa" Foreground="#CFCFCF"/>
+            <Canvas Width="232" Height="64" HorizontalAlignment="Left" Margin="0,2,0,6"><Rectangle Canvas.Left="198" Canvas.Top="4" Width="26" Height="56" Stroke="#6A6A6A" StrokeDashArray="3,2"/><Path Stroke="#3DA5F5" StrokeThickness="2.2" Data="M60,48 L218,48 L218,14"/><Path Stroke="#7CC576" StrokeThickness="1" Data="M218,6 L228,6 M218,3 L218,9 M228,3 L228,9"/><TextBlock Canvas.Left="217" Canvas.Top="-8" Text="Ln" Foreground="#7CC576" FontSize="11" FontStyle="Italic"/><Path Stroke="#8C8C8C" StrokeThickness="1" Data="M60,6 L198,6 M60,3 L60,9 M198,3 L198,9"/><TextBlock Canvas.Left="123" Canvas.Top="-8" Text="L" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"/><TextBlock Canvas.Left="202" Canvas.Top="22" Text="La" Foreground="#8C8C8C" FontSize="11" FontStyle="Italic"><TextBlock.LayoutTransform><RotateTransform Angle="-90"/></TextBlock.LayoutTransform></TextBlock><Line X1="10" Y1="34" X2="198" Y2="34" Stroke="#555558" StrokeDashArray="4,3"/></Canvas>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+              <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbBeBt" Width="118"/>
+              <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="n ="/>
+              <ComboBox x:Name="cbBeN" Width="50"/>
+            </StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="36"/><ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+              
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Lbl}" Foreground="#7CC576" Text="Ln ="/>
+            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBeLn" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Lbl}" Text="La ="/>
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbBeLa" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Lbl}" Text="L ="/>
+            <StackPanel Grid.Row="1" Grid.Column="3" Orientation="Horizontal"><TextBox x:Name="tbBeL" Width="48" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+            </Grid>
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,6">
+              <Button x:Name="btnBeAdd" Style="{StaticResource GrayBtn}" Width="108" Content="Agregar capa" Tag="t:add_layer"/>
+              <Button x:Name="btnBeDel" Style="{StaticResource GrayBtn}" Width="108" Margin="8,0,0,0" Content="Borrar capa" Tag="t:del_layer"/>
+            </StackPanel>
+          </StackPanel>
+          <Border x:Name="tblBe" Grid.Row="1" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22" MinHeight="60"/>
+        </Grid>
+      </GroupBox></Grid>
+            </Grid>
+
+            <!-- 4: Barra central -->
+            <Grid x:Name="pg4" Visibility="Collapsed">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="470"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <GroupBox Grid.Column="0" Style="{StaticResource Grp}" Header="BARRA CENTRAL" Tag="t:g_side">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Top">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                      <TextBlock Style="{StaticResource Lbl}" Tag="t:side_style" Text="Estilo"/>
+                      <ComboBox x:Name="cbSideStyle" Width="170"/>
+                      <CheckBox x:Name="chkSideOn" Content="Añadir barra central" Tag="t:side_on" Margin="16,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                      <TextBlock Style="{StaticResource Lbl}" Tag="t:bar" Text="Barra" /><ComboBox x:Name="cbSideBt" Width="120"/>
+                      <TextBlock Style="{StaticResource Lbl}" Tag="t:rows" Text="Filas" Margin="12,0,6,0"/>
+                      <ComboBox x:Name="cbSideRows" Width="56"/>
+                      <TextBlock Style="{StaticResource Lbl}" Tag="t:side_sp" Text="o sep. máx." Margin="12,0,6,0"/>
+                      <TextBox x:Name="tbSideSp" Width="46" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                      <TextBlock Style="{StaticResource Lbl}" Text="ExLeft"/><TextBox x:Name="tbSideExl" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                      <TextBlock Style="{StaticResource Lbl}" Text="ExRight"/><TextBox x:Name="tbSideExr" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                      <TextBlock Style="{StaticResource Lbl}" Tag="t:side_hook" Text="Gancho en extremos"/>
+                      <ComboBox x:Name="cbSideHook" Width="190"/>
+                      <TextBlock Style="{StaticResource Lbl}" Margin="12,0,6,0" Text="L ="/>
+                      <TextBox x:Name="tbSideHookL" Width="46" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                    </StackPanel>
+                    <TextBlock x:Name="txtSideInfo" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <Button x:Name="btnSideAll" Style="{StaticResource GrayBtn}" HorizontalAlignment="Left" Margin="0,0,0,8"
+                            Content="Aplicar a todos los tramos" Tag="t:apply_all"/>
+                  </StackPanel>
+                  <Border x:Name="tblSide" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22"/>
+                </DockPanel>
+              </GroupBox>
+              <GroupBox Grid.Column="1" Style="{StaticResource Grp}" Header="SECCIÓN" Tag="t:g_section">
+                <Canvas x:Name="secCanvas4" ClipToBounds="True" Background="#1F1F22"/>
+              </GroupBox>
+            </Grid>
+
+            <!-- 5: Estribos -->
+            <Grid x:Name="pg5" Visibility="Collapsed">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="470"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <GroupBox Grid.Column="0" Style="{StaticResource Grp}" Header="ESTRIBOS" Tag="t:g_stir">
+                <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                  <CheckBox x:Name="chkStOn" Content="Crear estribos" Tag="t:st_on" Margin="0,0,0,8"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                      <RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/>
+                      <RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="lblStSpan" Grid.Row="0" Style="{StaticResource Lbl}" Text="Ø estribo — tramo 1"/>
+                    <ComboBox x:Name="cbStSpanBt" Grid.Row="0" Grid.Column="1" Width="200" HorizontalAlignment="Left"/>
+                    <TextBlock Grid.Row="1" Style="{StaticResource Lbl}" Tag="t:stir_kind" Text="Estribo"/>
+                    <ComboBox x:Name="cbStDouble" Grid.Row="1" Grid.Column="1" Width="250" HorizontalAlignment="Left"/>
+                    <TextBlock Grid.Row="2" Style="{StaticResource Lbl}" Tag="t:hook_type" Text="Tipo de gancho"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                      <ComboBox x:Name="cbStHook" Width="200"/>
+                      <TextBox x:Name="tbStHookLen" Width="44" IsReadOnly="True" Foreground="#8C8C8C" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                      <TextBlock Style="{StaticResource Unit}" Text="cm"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="3" Style="{StaticResource Lbl}" Tag="t:st_mode" Text="Distribución"/>
+                    <ComboBox x:Name="cbStMode" Grid.Row="3" Grid.Column="1" Width="250" HorizontalAlignment="Left"/>
+                    <TextBlock Grid.Row="4" Style="{StaticResource Lbl}" Tag="t:first" Text="Primer estribo a"/>
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStFirst" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                      <TextBlock Style="{StaticResource Hint}" Tag="t:first_hint" Text="(desde el paño del apoyo)" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </Grid>
+                  <Grid x:Name="pnlStZones">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Style="{StaticResource Lbl}" Tag="t:lc" Text="Zona confinada"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStLc" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/>
+                      <TextBlock Style="{StaticResource Hint}" Tag="t:lc_hint" Text="(en cada extremo del tramo)" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Style="{StaticResource Lbl}" Tag="t:sc" Text="Separación confinada"/>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStSc" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+                    <TextBlock Grid.Row="2" Style="{StaticResource Lbl}" Tag="t:sm" Text="Separación al centro"/>
+                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStSm" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="m"/></StackPanel>
+                  </Grid>
+                  <StackPanel x:Name="pnlStGroups" Visibility="Collapsed">
+                    <Grid>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="30"/><RowDefinition Height="30"/></Grid.RowDefinitions>
+                      <TextBlock Grid.Row="0" Style="{StaticResource Lbl}" Tag="t:st_left" Text="Desde el apoyo inicial"/>
+                      <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStLeft" Width="170" Text="" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Hint}" Tag="t:st_left_hint" Text="(n@sep en cm)" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                      </StackPanel>
+                      <TextBlock Grid.Row="1" Style="{StaticResource Lbl}" Tag="t:st_mid" Text="Centro @"/>
+                      <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStMid" Width="52" Text="" VerticalAlignment="Center"/><TextBlock Style="{StaticResource Unit}" Text="cm"/>
+                        <TextBlock Style="{StaticResource Hint}" Tag="t:st_mid_hint" Text="(separación máxima)" VerticalAlignment="Center"/>
+                      </StackPanel>
+                      <TextBlock Grid.Row="2" Style="{StaticResource Lbl}" Tag="t:st_right" Text="Desde el apoyo final"/>
+                      <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal"><TextBox x:Name="tbStRight" Width="170" Text="" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource Hint}" Tag="t:st_right_hint" Text="(vacío = igual)" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                      </StackPanel>
+                    </Grid>
+                  </StackPanel>
+                  <Button x:Name="btnStAll" Style="{StaticResource GrayBtn}" HorizontalAlignment="Left" Margin="0,4,0,4"
+                          Content="Aplicar a todos los tramos" Tag="t:apply_all"/>
+                  <TextBlock x:Name="txtStInfo" Foreground="#A8A8A8" TextWrapping="Wrap" Margin="0,6,0,6"/>
+                </StackPanel>
+                <Border x:Name="tblStGroups" BorderBrush="#4A4A4E" BorderThickness="1" Background="#1F1F22"/>
+                </DockPanel>
+              </GroupBox>
+              <GroupBox Grid.Column="1" Style="{StaticResource Grp}" Header="SECCIÓN" Tag="t:g_section">
+                <Canvas x:Name="secCanvas5" ClipToBounds="True" Background="#1F1F22"/>
+              </GroupBox>
+            </Grid>
+
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- Alzado -->
+      <Border Grid.Row="2" Margin="8,0,8,0" Background="#1F1F22" BorderBrush="#5A5A5E" BorderThickness="1" CornerRadius="3">
+        <Grid>
+          <Canvas x:Name="elevCanvas" ClipToBounds="True" Background="Transparent" Cursor="Hand"/>
+          <TextBlock x:Name="txtElevHint" Margin="8,4,0,0" Foreground="#6E6E6E" FontSize="11" IsHitTestVisible="False"
+                     HorizontalAlignment="Left" VerticalAlignment="Top"/>
+        </Grid>
+      </Border>
+
+      <!-- Pie -->
+      <Grid Grid.Row="3" Margin="8,8,24,8">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+          <Button x:Name="btnSave" Style="{StaticResource BlueBtn}" Height="30" MinWidth="100">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="14" Height="14" Margin="0,0,6,0">
+                <Path Stroke="White" StrokeThickness="1.3" Data="M1,1 L10,1 L13,4 L13,13 L1,13 Z M4,1 L4,5 L10,5 L10,1 M3,13 L3,8 L11,8 L11,13"/>
+              </Canvas>
+              <TextBlock Tag="t:save" Text="Guardar"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="btnImport" Style="{StaticResource BlueBtn}" Height="30" MinWidth="100" Margin="8,0,0,0">
+            <StackPanel Orientation="Horizontal">
+              <Canvas Width="15" Height="14" Margin="0,0,6,0">
+                <Path Stroke="White" StrokeThickness="1.3" Data="M1,3 L5,3 L6.5,5 L13,5 L13,13 L1,13 Z"/>
+              </Canvas>
+              <TextBlock Tag="t:import" Text="Importar"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="btnPick" Style="{StaticResource GrayBtn}" Height="30" MinWidth="96" Margin="18,0,0,0" Content="Seleccionar"/>
+          <Button x:Name="btnRefresh" Style="{StaticResource GrayBtn}" Height="30" MinWidth="90" Margin="8,0,0,0" Content="Actualizar"/>
+        </StackPanel>
+        <TextBlock x:Name="txtStatus" Foreground="#E8A13A" VerticalAlignment="Center" TextWrapping="Wrap"
+                   Margin="440,0,130,0" TextTrimming="CharacterEllipsis"/>
+        <Button x:Name="btnOK" Style="{StaticResource BlueBtn}" Content="OK" Width="100" Height="30" HorizontalAlignment="Right"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
