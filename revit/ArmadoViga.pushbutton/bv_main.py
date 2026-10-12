@@ -61,8 +61,15 @@ def _desc(info, model, errors):
     lines = [u'%d viga(s) · %s' % (len(info['chain']), tname)]
     fr = info.get('frame')
     if getattr(fr, 'sloped', False):
-        lines.append(u'Viga inclinada %.1f°: longitudes medidas a lo largo de la viga y alturas perpendiculares a '
-                     u'ella; el alzado se dibuja desarrollado (horizontal).' % abs(fr.angle))
+        ang = fr.angles
+        if len(ang) > 1:
+            lines.append(u'Cambio de pendiente: %s (quiebre en %s); las varillas se doblan en el quiebre y los '
+                         u'estribos quedan perpendiculares a cada tramo. Longitudes a lo largo de la viga; el alzado '
+                         u'se dibuja desarrollado.' % (u' → '.join(u'%.1f°' % a for a in ang),
+                                                       u', '.join(n for _, n in info.get('vkinks') or []) or u'un apoyo'))
+        else:
+            lines.append(u'Viga inclinada %.1f°: longitudes medidas a lo largo de la viga y alturas perpendiculares a '
+                         u'ella; el alzado se dibuja desarrollado (horizontal).' % abs(fr.angle))
     if model.joints:
         y0 = model.sec(0)['yc'] + model.sec(0)['h'] / 2.0
         secs = []
@@ -141,9 +148,10 @@ class Session(object):
         self.info = info
         self.templates = R.get_section_templates(self.doc)
         model = G.BeamModel(info['b'], info['h'], info['L'], info['supports'], parts=info.get('parts'),
-                            bends=info.get('bends'), end_parts=info.get('end_parts'))
+                            bends=info.get('bends'), end_parts=info.get('end_parts'), vkinks=info.get('vkinks'))
         fr = info.get('frame')
         model.slope = abs(fr.angle) if getattr(fr, 'sloped', False) else 0.0      # para el alzado
+        model.slopes = [round(a, 1) for a in fr.angles] if getattr(fr, 'sloped', False) else []
         ctx = {
             'model': model,
             'bar_types': self.bar_types,

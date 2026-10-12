@@ -297,37 +297,133 @@ def fr_w(fr):
 class Frame(object):
     """Sistema local de la cadena de vigas (pies).
 
-    u: a lo largo de la viga (inclinada si la viga lo esta), v: horizontal a lo ancho, w: "altura"
-    perpendicular a la viga dentro del plano vertical que la contiene (Z en vigas horizontales).
-    z(p) = O.Z + (p - O)·w: en vigas horizontales (O.Z = 0) es la Z del modelo, como antes."""
+    u: direccion de la cadena en planta (horizontal), v: horizontal a lo ancho.
+    Vigas horizontales: s = (p - O)·u y z = Z del modelo (como siempre).
+    Vigas con pendiente (una o varias, p. ej. una horizontal seguida de una inclinada): la cadena sigue
+    un PERFIL en elevacion, poligonal [(h, Z)] (h horizontal a lo largo de u desde O). s es la longitud
+    sobre el perfil y z = Zref + distancia perpendicular al tramo del perfil (Zref = Z del primer vertice),
+    asi una varilla paralela a las caras de la viga tiene z constante aunque la viga cambie de pendiente.
+    En los quiebres el punto se lleva a la bisectriz (inglete): las caras desplazadas se cortan ahi."""
 
-    def __init__(self, O, u, t=None):
+    def __init__(self, O, u, prof=None):
         self.O = O
+        self.uh = u
         self.v = XYZ.BasisZ.CrossProduct(u).Normalize()
-        self.u = t if t is not None else u
-        self.w = self.u.CrossProduct(self.v).Normalize()
-        self.sloped = abs(self.u.Z) > 1e-6
+        self.prof = None
+        self.sloped = False
+        self.u = u
+        self.w = XYZ.BasisZ
+        if prof and len(prof) >= 2:
+            self._set_profile(prof)
+
+    # ---- perfil
+    def _set_profile(self, prof):
+        V = [(float(h), float(z)) for h, z in prof]
+        self.prof = V
+        self.zref = V[0][1]
+        self.seg = []                                    # (h0, z0, dh, dz, S0, L)
+        S = 0.0
+        for (h0, z0), (h1, z1) in zip(V, V[1:]):
+            L = math.hypot(h1 - h0, z1 - z0)
+            self.seg.append((h0, z0, (h1 - h0) / L, (z1 - z0) / L, S, L))
+            S += L
+        self.sloped = any(abs(q[3]) > 1e-4 for q in self.seg)
+        self.kinks_s = [q[4] for q in self.seg[1:]]       # s (pies) de cada quiebre
+        # con una sola pendiente, u y w del marco siguen la viga (vistas y planos)
+        self.u = self.tangent_at(0)
+        self.w = self.normal_at(0)
+
+    def _k_of_s(self, s):
+        k = 0
+        while k < len(self.seg) - 1 and s >= self.seg[k + 1][4] - 1e-9:
+            k += 1
+        return k
+
+    def _k_of_pt(self, h, z):
+        k = 0
+        for i in range(1, len(self.seg)):
+            a, b = self.seg[i - 1], self.seg[i]
+            mh, mz = a[2] + b[2], a[3] + b[3]            # bisectriz de las direcciones
+            if (h - b[0]) * mh + (z - b[1]) * mz > 0.0:
+                k = i
+        return k
+
+    def tangent_at(self, k):
+        q = self.seg[k]
+        return XYZ(self.uh.X * q[2], self.uh.Y * q[2], q[3])
+
+    def normal_at(self, k):
+        q = self.seg[k]
+        return XYZ(-self.uh.X * q[3], -self.uh.Y * q[3], q[2])
+
+    def tangent(self, s):
+        """Direccion de la viga (3D) en la posicion s del marco (pies)."""
+        return self.tangent_at(self._k_of_s(s)) if self.prof else self.u
+
+    def up(self, s):
+        """'Arriba' de la seccion en la posicion s: perpendicular a la viga en su plano vertical."""
+        return self.normal_at(self._k_of_s(s)) if self.prof else XYZ.BasisZ
+
+    def kinks_between(self, s0, s1):
+        if not self.prof:
+            return []
+        return [x for x in self.kinks_s if s0 + 1e-6 < x < s1 - 1e-6]
 
     @property
     def angle(self):
-        """Pendiente de la viga (grados)."""
-        return math.degrees(math.asin(max(-1.0, min(1.0, self.u.Z))))
+        """Pendiente maxima de la cadena (grados)."""
+        if not self.prof:
+            return 0.0
+        return max(abs(math.degrees(math.asin(max(-1.0, min(1.0, q[3]))))) for q in self.seg)
+
+    @property
+    def angles(self):
+        if not self.prof:
+            return [0.0]
+        return [math.degrees(math.asin(max(-1.0, min(1.0, q[3])))) for q in self.seg]
+
+    # ---- coordenadas
+    def _h(self, p):
+        return (p.X - self.O.X) * self.uh.X + (p.Y - self.O.Y) * self.uh.Y
 
     def s(self, p):
-        return (p.X - self.O.X) * self.u.X + (p.Y - self.O.Y) * self.u.Y + (p.Z - self.O.Z) * self.u.Z
-
-    def z(self, p):
-        return self.O.Z + (p.X - self.O.X) * self.w.X + (p.Y - self.O.Y) * self.w.Y + (p.Z - self.O.Z) * self.w.Z
-
-    def world(self, s, l, z):
-        """Punto del modelo a partir de (s, l, z) del marco (pies)."""
-        dz = z - self.O.Z
-        return XYZ(self.O.X + self.u.X * s + self.v.X * l + self.w.X * dz,
-                   self.O.Y + self.u.Y * s + self.v.Y * l + self.w.Y * dz,
-                   self.O.Z + self.u.Z * s + self.v.Z * l + self.w.Z * dz)
+        if not self.prof:
+            return self._h(p)
+        h, z = self._h(p), p.Z
+        k = self._k_of_pt(h, z)
+        q = self.seg[k]
+        return q[4] + (h - q[0]) * q[2] + (z - q[1]) * q[3]
 
     def l(self, p):
         return (p.X - self.O.X) * self.v.X + (p.Y - self.O.Y) * self.v.Y
+
+    def z(self, p):
+        if not self.prof:
+            return p.Z
+        h, z = self._h(p), p.Z
+        q = self.seg[self._k_of_pt(h, z)]
+        return self.zref + (z - q[1]) * q[2] - (h - q[0]) * q[3]
+
+    def world(self, s, l, z):
+        """Punto del modelo a partir de (s, l, z) del marco (pies)."""
+        if not self.prof:
+            return XYZ(self.O.X + self.uh.X * s + self.v.X * l, self.O.Y + self.uh.Y * s + self.v.Y * l, z)
+        d = z - self.zref
+        k = self._k_of_s(s)
+        q = self.seg[k]
+        if k > 0 and abs(s - q[4]) < 1e-6:
+            # en el quiebre: interseccion de las dos caras desplazadas (bisectriz)
+            a = self.seg[k - 1]
+            nh, nz = -(a[3] + q[3]), a[2] + q[2]
+            L = math.hypot(nh, nz)
+            nh, nz = nh / L, nz / L
+            c = nh * (-q[3]) + nz * q[2]
+            h, zz = q[0] + nh * d / c, q[1] + nz * d / c
+        else:
+            t = s - q[4]
+            h = q[0] + q[2] * t - q[3] * d
+            zz = q[1] + q[3] * t + q[2] * d
+        return XYZ(self.O.X + self.uh.X * h + self.v.X * l, self.O.Y + self.uh.Y * h + self.v.Y * l, zz)
 
 
 def _ranges(frame, pts):
@@ -404,6 +500,48 @@ def _level_step(A, B):
     return gap <= MAX_STEP
 
 
+PROFILE_ALIGN = 5.0 / FT             # vigas con pendiente: desfase maximo en planta respecto a la recta de la cadena
+
+
+def _profile(lines, O, u):
+    """Perfil en elevacion de una cadena con pendiente: [(h, Z)] (pies) por las lineas de ubicacion, con un
+    vertice en cada cambio de pendiente (interseccion de las dos lineas). Devuelve (lineas validas, perfil,
+    errores). Todas deben estar en la misma recta en planta."""
+    v = XYZ.BasisZ.CrossProduct(u).Normalize()
+    errors, segs = [], []
+    ref_l = None
+    for bm, crv in sorted(lines, key=lambda q: -q[1].Length):
+        a, b = crv.GetEndPoint(0), crv.GetEndPoint(1)
+        ha = (a.X - O.X) * u.X + (a.Y - O.Y) * u.Y
+        hb = (b.X - O.X) * u.X + (b.Y - O.Y) * u.Y
+        la = (a.X - O.X) * v.X + (a.Y - O.Y) * v.Y
+        lb = (b.X - O.X) * v.X + (b.Y - O.Y) * v.Y
+        if ref_l is None:
+            ref_l = (la + lb) / 2.0
+        if abs(la - ref_l) > PROFILE_ALIGN or abs(lb - ref_l) > PROFILE_ALIGN or abs(hb - ha) < 1e-6:
+            errors.append((bm, u'con pendiente, las vigas deben estar en una misma recta en planta; arme esta aparte'))
+            continue
+        if hb < ha:
+            ha, hb, a, b = hb, ha, b, a
+        segs.append((ha, a.Z, hb, b.Z, bm, crv))
+    segs.sort(key=lambda q: q[0])
+    if not segs:
+        return [], None, errors
+    pts = [(segs[0][0], segs[0][1])]
+    for A, B in zip(segs, segs[1:]):
+        ma = (A[3] - A[1]) / (A[2] - A[0])
+        mb = (B[3] - B[1]) / (B[2] - B[0])
+        if abs(math.atan(ma) - math.atan(mb)) < math.radians(0.3):
+            continue                                       # misma pendiente: sin quiebre
+        # interseccion de las dos lineas (cambio de pendiente)
+        h = (B[1] - mb * B[0] - A[1] + ma * A[0]) / (ma - mb)
+        if not (A[2] - 3.0 <= h <= B[0] + 3.0):
+            h = (A[2] + B[0]) / 2.0                        # no se cortan cerca de la union: a la mitad
+        pts.append((h, A[1] + ma * (h - A[0])))
+    pts.append((segs[-1][2], segs[-1][3]))
+    return [(q[4], q[5]) for q in segs], pts, errors
+
+
 def analyze_chain(doc, beams):
     """Devuelve (info, errores). info contiene el modelo en cm y el marco local.
 
@@ -435,23 +573,22 @@ def analyze_chain(doc, beams):
             best = (tot, d, crv)
     u = best[1]
     p0 = best[2].GetEndPoint(0)
-    # viga inclinada: el marco sigue su pendiente (u a lo largo de la viga, w perpendicular a ella); todas
-    # las vigas de la cadena deben tener la misma pendiente y estar en la misma recta en planta
-    t = best[2].Direction.Normalize()
-    if t.X * u.X + t.Y * u.Y < 0:
-        t = t.Negate()
-    sloped = abs(t.Z) > 0.02
-    fr = Frame(XYZ(p0.X, p0.Y, p0.Z) if sloped else XYZ(p0.X, p0.Y, 0.0), u, t if sloped else None)
+    O = XYZ(p0.X, p0.Y, 0.0)
+    # vigas con pendiente (todas o algunas, p. ej. una horizontal y una inclinada): la cadena sigue un perfil en
+    # elevacion; deben estar en una misma recta en planta
+    sloped = any(abs(c.Direction.Z) > 0.02 for _, c in lines)
+    prof = None
+    if sloped:
+        lines, prof, perr = _profile(lines, O, u)
+        errors.extend(perr)
+        if not lines:
+            return None, errors
+    fr = Frame(O, u, prof)
 
     cos_max = math.cos(math.radians(MAX_SKEW_DEG))
     chain = []
     embedded = []                        # vigas sin solido propio (embebidas): se miden de otra forma
     for bm, crv in lines:
-        tb = crv.Direction.Normalize()
-        if (abs(tb.Z) > 0.02) != sloped or (sloped and abs(abs(tb.DotProduct(fr.u)) - 1.0) > 1e-4):
-            errors.append((bm, u'tiene otra pendiente que las demás vigas (%.1f°); arme cada una aparte'
-                           % math.degrees(math.asin(max(-1.0, min(1.0, abs(tb.Z)))))))
-            continue
         d = _hdir(crv)
         if d.DotProduct(u) < 0:
             d = d.Negate()
@@ -476,7 +613,11 @@ def analyze_chain(doc, beams):
         bb = [(p.X - P0.X) * n.X + (p.Y - P0.Y) * n.Y for p in pts]
         w = max(bb) - min(bb)
         bc = (max(bb) + min(bb)) / 2.0                      # eje geometrico respecto a la ubicacion
-        C = XYZ(P0.X + n.X * bc, P0.Y + n.Y * bc, P0.Z if sloped else 0.0)
+        if sloped:                                  # punto medio de la linea de ubicacion (sobre el perfil)
+            P1 = crv.GetEndPoint(1)
+            C = XYZ((P0.X + P1.X) / 2.0 + n.X * bc, (P0.Y + P1.Y) / 2.0 + n.Y * bc, (P0.Z + P1.Z) / 2.0)
+        else:
+            C = XYZ(P0.X + n.X * bc, P0.Y + n.Y * bc, 0.0)
         cs, cl, du, dv = fr.s(C), fr.l(C), dot, d.DotProduct(fr.v)
         ss = [fr.s(p) for p in pts]
         s0, s1 = min(ss), max(ss)
@@ -529,6 +670,9 @@ def analyze_chain(doc, beams):
     z0 = min(c['z0'] for c in chain)
     z1 = max(c['z1'] for c in chain)
     warns = []
+    # cambios de pendiente (quiebres del perfil en elevacion), en cm desde el inicio de la cadena
+    info_vk = [((x - s_min) * FT, u'P%d' % (i + 1)) for i, x in enumerate(getattr(fr, 'kinks_s', None) or [])
+               if s_min < x < max(c['s1'] for c in chain)]
     how_txt = {'original': u'su geometría original (antes de uniones)',
                'section': u'la sección b × h de su tipo sobre su línea de ubicación',
                'bbox': u'su caja envolvente (revise el ancho si está girada en planta)'}
@@ -538,7 +682,7 @@ def analyze_chain(doc, beams):
                          u'se midió con %s' % (eid_int(bm.Id), how_txt.get(how, how)))
     info = {'frame': fr, 'chain': chain, 's_min': s_min, 'L': (s_max - s_min) * FT,
             'l_c': (l0 + l1) / 2.0, 'z_c': (z0 + z1) / 2.0, 'b': (l1 - l0) * FT, 'h': (z1 - z0) * FT,
-            'l0': l0, 'l1': l1, 'z0': z0, 'z1': z1, 'warns': warns}
+            'l0': l0, 'l1': l1, 'z0': z0, 'z1': z1, 'warns': warns, 'vkinks': info_vk}
     info['supports'] = find_supports(doc, info)
 
     # eje de la cadena en planta: cada contratrabe con su eje; en los apoyos donde cambia (desplazada o
@@ -863,11 +1007,11 @@ class Axis(object):
 
     def normal(self, m):
         fr = self.fr
-        return XYZ(fr.v.X - fr.u.X * m, fr.v.Y - fr.u.Y * m, 0.0).Normalize()
+        return XYZ(fr.v.X - fr.uh.X * m, fr.v.Y - fr.uh.Y * m, 0.0).Normalize()
 
     def direction(self, m):
         fr = self.fr
-        return XYZ(fr.u.X + fr.v.X * m, fr.u.Y + fr.v.Y * m, fr.u.Z).Normalize()
+        return XYZ(fr.uh.X + fr.v.X * m, fr.uh.Y + fr.v.Y * m, 0.0).Normalize()
 
     def crosses(self, s0, s1):
         """La varilla (pies) cruza completo algun cambio de eje."""
@@ -894,7 +1038,7 @@ def find_supports(doc, info):
     s_min = info['s_min']
     Lft = info['L'] / FT
     corners = []
-    for s in (s_min - 3.0, s_min + Lft + 3.0):
+    for s in [s_min - 3.0, s_min + Lft + 3.0] + list(getattr(fr, 'kinks_s', None) or []):
         for l in (info['l0'] - 2.0, info['l1'] + 2.0):
             for z in (info['z0'] - 0.5, info['z1'] + 0.5):
                 corners.append(fr.world(s, l, z))
@@ -944,7 +1088,7 @@ def find_supports(doc, info):
                 for c in near:
                     m = (c['lc_b'] - c['lc_a']) / max(c['s1'] - c['s0'], 1e-9)
                     k = math.sqrt(1.0 + m * m)
-                    dx, dy = (fr.u.X + fr.v.X * m) / k, (fr.u.Y + fr.v.Y * m) / k
+                    dx, dy = (fr.uh.X + fr.v.X * m) / k, (fr.uh.Y + fr.v.Y * m) / k
                     dot = max(dot, abs(d.X * dx + d.Y * dy))
                 if (is_wall and dot > 0.7) or (not is_wall and dot > 0.3):
                     continue
@@ -989,7 +1133,7 @@ def find_supports(doc, info):
         name = None
         best = None
         for gname, p, d in grids:
-            den = fr.u.X * d.Y - fr.u.Y * d.X
+            den = fr.uh.X * d.Y - fr.uh.Y * d.X
             if abs(den) < 1e-6:
                 continue
             wx, wy = p.X - fr.O.X, p.Y - fr.O.Y
@@ -1167,7 +1311,24 @@ class Builder(object):
 
     # --------------------------------------------------------- longitudinales
     def _bar_pts(self, b, x, run=0):
-        P = lambda s, xx, yy: self.P(s, xx, yy, run)
+        """Puntos de la varilla. En una viga con cambio de pendiente cada tramo recto que pasa un quiebre se
+        dobla ahi (vertice en la interseccion de las caras desplazadas): la varilla sigue en su plano."""
+        raw = self._bar_pts_raw(b, x, run)
+        kinks = [self._cm(k) for k in (self.fr.kinks_between(self._ft(min(q[0] for q in raw)),
+                                                             self._ft(max(q[0] for q in raw))))] if self.fr.prof else []
+        out = [raw[0]]
+        for q in raw[1:]:
+            a = out[-1]
+            if kinks and abs(q[1] - a[1]) < 1e-9 and abs(q[2] - a[2]) < 1e-9 and abs(q[0] - a[0]) > 1e-6:
+                ks = [k for k in kinks if min(a[0], q[0]) + 1e-6 < k < max(a[0], q[0]) - 1e-6]
+                for k in sorted(ks, reverse=q[0] < a[0]):
+                    out.append((k, q[1], q[2]))
+            out.append(q)
+        return [self.P(s_, xx, yy, run) for s_, xx, yy in out]
+
+    def _bar_pts_raw(self, b, x, run=0):
+        """(s, x, y) en cm de los vertices de la varilla."""
+        P = lambda s, xx, yy: (s, xx, yy)
         db = b['bt']['dm']
         ox = bool(b.get('off_x'))               # desfase del traslape en horizontal (hacia el centro)
         cx = -1.0 if x > 0 else 1.0             # hacia el eje de la viga
@@ -1222,7 +1383,7 @@ class Builder(object):
         # barra central con gancho horizontal, traslape desfasado en horizontal o doblez en planta: plano
         # horizontal y cada varilla por separado (los ganchos de los dos lados son simetricos, no una copia)
         flat = bool(b.get('off_x')) or any(v > 0.01 for v in (b.get('hin') or ())) or run is None
-        norm = fr_w(self.fr) if flat else self.axis.normal(self.axis.runs[run][2])
+        norm = self.fr.up(self._ft((b['s0'] + b['s1']) / 2.0)) if flat else self.axis.normal(self.axis.runs[run][2])
         xs = sorted(b['xs'])
         n = len(xs)
         if n > 1 and G.is_uniform(xs) and not flat:
@@ -1238,18 +1399,22 @@ class Builder(object):
             self.tag(rb, b['kind'])
             self.rep['count'][b['kind']] += 1
 
-    def _axis_disp(self, total, axis, run=0):
-        o = self.P(0.0, 0.0, 0.0, run)
-        return (self.P(0.0, total, 0.0, run) if axis == 'x' else self.P(total, 0.0, 0.0, run)).Subtract(o)
+    def _axis_disp(self, total, axis, run=0, s_at=0.0):
+        # en una viga con cambio de pendiente la direccion depende de donde esta el conjunto (s_at)
+        o = self.P(s_at, 0.0, 0.0, run)
+        return (self.P(s_at, total, 0.0, run) if axis == 'x' else self.P(s_at + total, 0.0, 0.0, run)).Subtract(o)
 
     def _layout_fixed(self, rb, n, length_cm, expect_last, axis, run=0):
-        r = AR.set_layout(self.doc, rb, n, length_cm / FT, self._axis_disp(length_cm, axis, run))
+        s_at = (expect_last - length_cm) if axis == 's' else 0.0
+        r = AR.set_layout(self.doc, rb, n, length_cm / FT, self._axis_disp(length_cm, axis, run, s_at))
         if r == AR.UNVERIFIED:
             self.rep['notes'].append(u'No se pudo verificar el lado de un conjunto de varillas; revíselo.')
         return r != AR.UNVERIFIED
 
     def _layout_spacing(self, rb, n, sp_cm, expect_last, axis, run=0):
-        r = AR.set_layout(self.doc, rb, n, sp_cm / FT, self._axis_disp(sp_cm * (int(n) - 1), axis, run), True)
+        tot = sp_cm * (int(n) - 1)
+        s_at = (expect_last - tot) if axis == 's' else 0.0
+        r = AR.set_layout(self.doc, rb, n, sp_cm / FT, self._axis_disp(tot, axis, run, s_at), True)
         if r == AR.UNVERIFIED:
             self.rep['notes'].append(u'No se pudo verificar el sentido de un conjunto de estribos; revíselo.')
         return r != AR.UNVERIFIED
@@ -1265,7 +1430,7 @@ class Builder(object):
         run = self.axis.home(self._ft(s0), self._ft(s_last))       # estribos perpendiculares a su viga
         pts = [self.P(s0, x, y, run) for x, y in poly] + [self.P(s0, poly[0][0], poly[0][1], run)]
         host = self.host_for(s0, s_last)
-        norm = self.axis.direction(self.axis.runs[run][2])
+        norm = self.fr.tangent(self._ft(s0)) if self.fr.prof else self.axis.direction(self.axis.runs[run][2])
         if hk is None:
             rb = _create(doc, RebarStyle.StirrupTie, bt, None, None, host, norm, pts, RIGHT, RIGHT)
         elif self.st_orient is not None:
@@ -1345,9 +1510,23 @@ class Builder(object):
                 S1 = max(S1, b['s1'])
             mid = (S0 + S1) / 2.0
             half = (S1 - S0) / 2.0 + 40.0
-            vs = self._section(vft, self.P(mid, 0, 0), fr.u, fr.w, fr.u.CrossProduct(fr.w),
-                               half, m.h / 2.0 + 80.0, -(m.b / 2.0 + 15.0), m.b / 2.0 + 15.0,
-                               u'Armado viga %s' % label, templates.get(v.get('elev_tpl')), 25)
+            if fr.prof and len(fr.seg) > 1:
+                # cambio de pendiente: alzado en el plano vertical de la cadena, que abarque todo el perfil
+                ss = [S0, S1] + [self._cm(x) for x in fr.kinks_s if S0 < self._cm(x) < S1]
+                pp = [self.P(x, 0, 0) for x in ss]
+                hh = [(q.X - fr.O.X) * fr.uh.X + (q.Y - fr.O.Y) * fr.uh.Y for q in pp]
+                zz = [q.Z for q in pp]
+                hc, zc = (min(hh) + max(hh)) / 2.0, (min(zz) + max(zz)) / 2.0
+                org = XYZ(fr.O.X + fr.uh.X * hc + fr.v.X * fr.l(pp[0]), fr.O.Y + fr.uh.Y * hc + fr.v.Y * fr.l(pp[0]),
+                          zc)
+                vs = self._section(vft, org, fr.uh, XYZ.BasisZ, fr.uh.CrossProduct(XYZ.BasisZ),
+                                   (max(hh) - min(hh)) / 2.0 * FT + 40.0, (max(zz) - min(zz)) / 2.0 * FT + m.h / 2.0 + 80.0,
+                                   -(m.b / 2.0 + 15.0), m.b / 2.0 + 15.0,
+                                   u'Armado viga %s' % label, templates.get(v.get('elev_tpl')), 25)
+            else:
+                vs = self._section(vft, self.P(mid, 0, 0), fr.u, fr.w, fr.u.CrossProduct(fr.w),
+                                   half, m.h / 2.0 + 80.0, -(m.b / 2.0 + 15.0), m.b / 2.0 + 15.0,
+                                   u'Armado viga %s' % label, templates.get(v.get('elev_tpl')), 25)
             if vs is not None:
                 out.append(vs)
         if v.get('cross'):
@@ -1355,8 +1534,10 @@ class Builder(object):
                 fa, fb = m.span_faces(i)
                 run = self.axis.home(self._ft(fa), self._ft(fb))
                 mm = self.axis.runs[run][2]
-                vs = self._section(vft, self.P((fa + fb) / 2.0, 0, 0, run), self.axis.normal(mm), fr.w,
-                                   self.axis.direction(mm),
+                sm = self._ft((fa + fb) / 2.0)
+                vs = self._section(vft, self.P((fa + fb) / 2.0, 0, 0, run), self.axis.normal(mm),
+                                   fr.up(sm) if fr.prof else fr.w,
+                                   fr.tangent(sm) if fr.prof else self.axis.direction(mm),
                                    m.b / 2.0 + 30.0, m.h / 2.0 + 30.0, -40.0, 0.0,
                                    u'Armado viga %s - T%d' % (label, i + 1), templates.get(v.get('cross_tpl')), 20)
                 if vs is not None:

@@ -68,7 +68,7 @@ class BeamModel(object):
     parts: (s0, s1, b, h, xc, yc) de cada viga de la cadena (cm; xc, yc = centro de su seccion
     respecto al centro de la envolvente). Cada tramo toma la seccion de la viga que lo ocupa."""
 
-    def __init__(self, b, h, L, supports, tol=5.0, parts=None, bends=None, end_parts=None):
+    def __init__(self, b, h, L, supports, tol=5.0, parts=None, bends=None, end_parts=None, vkinks=None):
         self.b = float(b)
         self.h = float(h)
         self.L = float(L)
@@ -121,6 +121,14 @@ class BeamModel(object):
                 if (len(bd) < 4 or bd[3]) and lo + 1.0 < pos < hi - 1.0 and \
                         not any(n.s0 - 1.0 <= pos <= n.s1 + 1.0 for n in self.nodes):
                     self.nodes.append(Node(pos, pos, bd[2] if len(bd) > 2 else u'Q', False, u'cambio'))
+        # cambio de pendiente sin apoyo (viga horizontal seguida de una inclinada): nodo sin ancho que divide el
+        # claro, para que ningun conjunto de estribos pase el quiebre. Las varillas siguen corridas (se doblan en
+        # su plano vertical)
+        self.vkinks = []
+        for pos, name in (vkinks or []):
+            self.vkinks.append((float(pos), name))
+            if lo + 1.0 < pos < hi - 1.0 and not any(n.s0 - 1.0 <= pos <= n.s1 + 1.0 for n in self.nodes):
+                self.nodes.append(Node(pos, pos, name, False, u'cambio'))
         self.nodes.sort(key=lambda n: n.s0)
         self.sections = [self._span_section(i) for i in range(self.n_spans)]
         # apoyos donde la viga cambia de eje (contratrabe desplazada o girada): (s0, s1) de cada uno.
