@@ -176,7 +176,9 @@ def _help_rows():
         [u'9', u'Primero use "Revisar" (no crea nada); luego "Aplicar". Todo lo que crea "Aplicar" se deshace con un solo Ctrl+Z.'],
         [u'10', u'Montajes: al aplicar se crea un montaje por muro con su acero ("Muro M-1 Nivel +16.10"). Muros del mismo tipo '
                 u'en otro lugar: "Muro M-1.1 Nivel +16.10". Los montajes que ya tenían esos muros o varillas se desensamblan antes. '
-                u'Los muros del mismo tipo unidos en esquina van en un solo montaje. Se apaga en Configuracion › Crear montajes = No.'],
+                u'Los muros del mismo tipo unidos en esquina van en un solo montaje. Montajes idénticos en otros niveles '
+                u'(+10.40 y +27.50) llevan cada uno su propio tipo y nombre; el nombre también queda en Comentarios '
+                u'del montaje. Se apaga en Configuracion › Crear montajes = No.'],
         [u'11', u'La columna Notas de la plantilla dice cuántos muros de cada tipo están en esquina en L. Para armarlos '
                 u'sueltos: Configuracion › Esquinas en L = No.'],
     ]
@@ -786,36 +788,107 @@ def make_assemblies(doc, report, fmt, fatal):
             for r in g:
                 r['avisos'].append(u'no se pudo crear el montaje "%s": %s' % (nm, ex))
     t.Commit()
-    used = {}
-    for at in FilteredElementCollector(doc).OfClass(AssemblyType):
-        used[R.el_name(at)] = at
-    inst_types = set(R.eid_int(a.GetTypeId()) for a in FilteredElementCollector(doc).OfClass(AssemblyInstance))
+    # Revit da el MISMO tipo de montaje a montajes identicos (el mismo muro con el mismo acero en +10.40 y en
+    # +27.50), y el nombre del montaje es el nombre de ese tipo: renombrar el tipo renombraba los dos. Cada
+    # montaje se nombra por su instancia (AssemblyTypeName), que lo pasa a un tipo propio con ese nombre; el
+    # tipo compartido solo se renombra si nadie mas lo usa. Ademas, el nombre se escribe en Comentarios del
+    # montaje (instancia) para poder filtrar las tablas aunque Revit no permitiera separar el tipo.
     t = Transaction(doc, u'Nombrar montajes de muros')
     t.Start()
     for aid, nm, g in made:
         ai = doc.GetElement(aid)
-        final = nm
-        n = 0
-        while final in used and R.eid_int(used[final].Id) in inst_types and \
-                R.eid_int(used[final].Id) != R.eid_int(ai.GetTypeId()):
-            n += 1
-            final = u'%s (%d)' % (nm, n)
-        if final in used and R.eid_int(used[final].Id) not in inst_types:
-            try:
-                doc.Delete(used[final].Id)
-            except Exception:
-                pass
-        try:
-            doc.GetElement(ai.GetTypeId()).Name = final
-            used[final] = doc.GetElement(ai.GetTypeId())
-            inst_types.add(R.eid_int(ai.GetTypeId()))
-        except Exception as ex:
-            for r in g:
-                r['avisos'].append(u'montaje creado pero no se pudo nombrar "%s": %s' % (final, ex))
+        if ai is None:
             continue
+        final, err = _name_assembly(doc, ai, nm)
+        if final is None:
+            for r in g:
+                r['avisos'].append(u'montaje creado pero no se pudo nombrar "%s": %s' % (nm, err))
+            continue
+        _set_comment(ai, nm)
         for r in g:
             r['montaje_final'] = final
+            if final != nm:
+                r['avisos'].append(u'el montaje quedó como "%s": Revit no permitió un tipo propio con el nombre "%s" '
+                                   u'(use Comentarios del montaje para filtrar)' % (final, nm))
     t.Commit()
+
+
+def _type_users(doc, type_id):
+    """Instancias de montaje que usan el tipo type_id."""
+    out = []
+    for a in FilteredElementCollector(doc).OfClass(AssemblyInstance):
+        try:
+            if a.GetTypeId() == type_id:
+                out.append(a)
+        except Exception:
+            pass
+    return out
+
+
+def _types_by_name(doc):
+    out = {}
+    for at in FilteredElementCollector(doc).OfClass(AssemblyType):
+        out[R.el_name(at)] = at
+    return out
+
+
+def _name_assembly(doc, ai, nm):
+    """Nombra el montaje ai como nm sin cambiar el nombre de otros montajes. Devuelve (nombre final, error)."""
+    err = u''
+    for n in range(0, 50):
+        final = nm if n == 0 else u'%s (%d)' % (nm, n)
+        types = _types_by_name(doc)
+        tid = ai.GetTypeId()
+        cur = doc.GetElement(tid)
+        if cur is not None and R.el_name(cur) == final:
+            return final, None
+        other = types.get(final)
+        if other is not None:
+            users = [a for a in _type_users(doc, other.Id) if a.Id != ai.Id]
+            if not users:
+                # tipo sin montajes (de una corrida anterior): se borra para liberar el nombre
+                try:
+                    doc.Delete(other.Id)
+                except Exception:
+                    continue
+            else:
+                continue          # el nombre lo usa otro montaje (otro nivel / otro muro): siguiente numero
+        shared = [a for a in _type_users(doc, tid) if a.Id != ai.Id]
+        if not shared:
+            try:
+                cur.Name = final              # el tipo es solo de este montaje
+                return final, None
+            except Exception as ex:
+                err = u'%s' % ex
+                continue
+        # tipo compartido con otro montaje identico: este montaje pasa a un tipo nuevo con su nombre
+        names = [(a.Id, R.el_name(doc.GetElement(a.GetTypeId()))) for a in shared]
+        try:
+            ai.AssemblyTypeName = final
+        except Exception as ex:
+            err = u'%s' % ex
+            continue
+        changed = [i for i, old in names if R.el_name(doc.GetElement(doc.GetElement(i).GetTypeId())) != old]
+        if R.el_name(doc.GetElement(ai.GetTypeId())) == final and not changed:
+            return final, None
+        # Revit renombro el tipo compartido (tambien el otro montaje): se regresa su nombre
+        if changed:
+            try:
+                doc.GetElement(doc.GetElement(changed[0]).GetTypeId()).Name = dict(names)[changed[0]]
+            except Exception:
+                pass
+        return R.el_name(doc.GetElement(ai.GetTypeId())), None
+    return None, err or u'sin nombre disponible'
+
+
+def _set_comment(ai, text):
+    """Nombre del montaje (con su nivel) en Comentarios de la instancia: filtro seguro en las tablas."""
+    try:
+        p = ai.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)
+        if p is not None and not p.IsReadOnly:
+            p.Set(text)
+    except Exception:
+        pass
 
 
 # ================================================================== reporte
