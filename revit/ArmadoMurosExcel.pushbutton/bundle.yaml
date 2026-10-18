@@ -1,0 +1,12 @@
+title: "Armado\nMuros Excel"
+tooltip: >-
+  Arma muchos muros de una vez desde una tabla de Excel, con el mismo motor de Armado Muro.
+  1) Generar plantilla: una fila por tipo de muro (M-1, M-2...) de los niveles elegidos, con espesor,
+  número de muros, longitudes y alto.
+  2) Llene el armado del plano: Niveles N2-N4, verticales "#4@20", horizontales "#3@20",
+  bordes "4#5 40" (extremo libre, intersección y esquina en L), estribos de borde "E#3 @10 @20",
+  refuerzo de huecos "2#5 60". Los muros en esquina en L (L, U, Z) se arman juntos.
+  3) Revisar (no crea nada) y 4) Aplicar: arma todos los muros de ese tipo en esos niveles, llena el
+  parámetro Nivel de las varillas, crea un montaje por muro ("Muro M-1 Nivel +16.10") y todo se
+  deshace con un solo Ctrl+Z.
+author: Osvaldo
