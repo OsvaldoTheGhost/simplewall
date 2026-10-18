@@ -21,7 +21,5 @@ Excel para el botón de pyRevit "Armado de muros" (hoja **Armado**), leído del 
 ## Pendiente
 
 - **Azotea ("ROOF - TECHOS")**: pasada a la hoja Armado (filas `+30.55`). Extremos asignados por la posición de las etiquetas del DWG: revisar en el reporte. Datos crudos en la hoja "Azotea (pendiente)" y en `azotea_roof_techos.json`.
-  "Azotea (pendiente)" del Excel y en `azotea_roof_techos.json` (sin asignar a extremos).
-  Muros: M-1, M-8, M-10, M-11, M-12, M-13, M-14, M-15, M-28, M-29, M-30, M-31/M-31A, M-32, M-33/M-33A,
-  M-34, M-35, M-36. Falta el nombre del nivel de azotea en el modelo.
+  Muros: M-1, M-8, M-10 a M-15, M-28 a M-36 (M-31A y M-33A incluidos).
 - Correr **Revisar** con el Excel en el modelo.
