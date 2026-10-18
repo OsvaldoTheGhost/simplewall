@@ -1039,19 +1039,31 @@ def compute(model, cfg, zones, bts, extra=None):
     def add_v(kind, bt, x, ss, pieces, ld):
         for pc in pieces:
             za, zb, l0, l1, zc = pc[:5]
+            ld0 = ld
             ld1 = ld
+            along = False
             if len(pc) > 5 and pc[5]:
                 # remate bajo un muro mas delgado: la pata hacia el interior del muro
                 ld1 = (0.0, -1.0 if x > 0 else 1.0) if abs(x) > 1e-6 else ld
-            crank = (zc, crank_dir(ss[0], x, ld)) if isinstance(zc, (int, float)) else None
-            # desfasado: a lo largo del muro, hacia el centro (queda en la misma parrilla)
-            shift = ((1.0 if sum(ss) / len(ss) < L / 2.0 else -1.0), 0.0) if zc == 'S' else None
             leg1_len = None
             if len(pc) > 6 and pc[6] in ('none', 'fit') and abs(x) > 1e-6:
                 # remate en la corona: la pata no sale por la cara opuesta (punta al recubrimiento)
                 leg1_len = max(min(float(g['hook_len']), abs(x) + t / 2.0 - c), 2.0 * bt['dm'])
+                if l1 and leg1_len - bt['dm'] / 2.0 < min_leg(bt) - 0.01:
+                    # muro delgado / varilla gruesa: la pata no cabe a traves del espesor (Revit no la puede
+                    # doblar) -> va a lo largo del muro, hacia el centro, con la longitud de pata completa.
+                    # La pata de la base (si la hay) gira igual para que la varilla quede en un solo plano.
+                    ld1 = (1.0 if sum(ss) / len(ss) < L / 2.0 else -1.0, 0.0)
+                    leg1_len = None
+                    if l0:
+                        ld0 = ld1
+                    along = True
+                    res['legs_along'] = res.get('legs_along', 0) + len(ss)
+            crank = (zc, crank_dir(ss[0], x, ld1 if along else ld)) if isinstance(zc, (int, float)) else None
+            # desfasado: a lo largo del muro, hacia el centro (queda en la misma parrilla)
+            shift = ((1.0 if sum(ss) / len(ss) < L / 2.0 else -1.0), 0.0) if zc == 'S' else None
             res['v'].append({'kind': kind, 'bt': bt, 'x': x, 'ss': list(ss), 'z0': za, 'z1': zb,
-                             'leg0': ld if l0 else None, 'leg1': ld1 if l1 else None,
+                             'leg0': ld0 if l0 else None, 'leg1': ld1 if l1 else None,
                              'leg_len': g['hook_len'], 'leg1_len': leg1_len, 'crank': crank, 'shift': shift,
                              'remate': bool(len(pc) > 5 and pc[5]), 'remate_why': pc[6] if len(pc) > 6 else None})
 
@@ -1160,6 +1172,10 @@ def compute(model, cfg, zones, bts, extra=None):
         for x in xs_h:
             maxleg = abs(x) + t / 2.0 - c - dh / 2.0
             leg = min(max(w['h_leg'] - dh / 2.0, dh), maxleg) if hend == 'hook90' else 0.0
+            if leg and leg < min_leg(hbt) - 0.01:
+                # la pata no cabe en el espesor (Revit no puede doblarla): horizontal recta
+                leg = 0.0
+                res['h_straight'] = True
             ldx = -1.0 if x > 0 else 1.0
             sigs = []
             for z in zpos:
@@ -1242,6 +1258,12 @@ def compute(model, cfg, zones, bts, extra=None):
     nrm = sum(len(v['ss']) for v in res['v'] if v.get('remate') and v.get('remate_why') in (None, 'fit'))
     nnc = sum(len(v['ss']) for v in res['v'] if v.get('remate') and v.get('remate_why') == 'none')
     nan = sum(len(v['ss']) for v in res['v'] if v.get('remate') and v.get('remate_why') == 'anchor')
+    if res.get('legs_along'):
+        warns.append(u'%d vertical(es): la pata del remate en la corona no cabe a través del espesor (Revit no '
+                     u'puede doblarla con ese diámetro); se colocó a lo largo del muro, hacia el centro'
+                     % res['legs_along'])
+    if res.get('h_straight'):
+        warns.append(u'Horizontales con gancho 90: la pata no cabe en el espesor del muro; se dejaron rectas')
     if nnc:
         warns.append(u'%d vertical(es) sin muro ni columna arriba: rematan con pata en la corona' % nnc)
     if nan:
@@ -1287,6 +1309,20 @@ def _split_h(res, g, stock):
 
 
 # ================================================================ resumen
+def min_leg(bt):
+    """Pata mas corta (cm, del eje de la varilla doblada a la punta) que Revit puede doblar con el diametro de
+    doblez del tipo; con menos sale 'No se puede resolver forma de armadura' (p. ej. #8 en muro de 15 cm)."""
+    dm = float(bt.get('dm') or 1.27)
+    bd = bt.get('bend')
+    try:
+        bd = float(bd) if bd else 0.0
+    except Exception:
+        bd = 0.0
+    if bd > 0.1:
+        return bd / 2.0 + dm / 2.0 + 0.5        # radio de doblez al eje + un poco de tramo recto
+    return 4.0 * dm
+
+
 def kg_m(d):
     return math.pi * (d / 100.0) ** 2 / 4.0 * STEEL
 

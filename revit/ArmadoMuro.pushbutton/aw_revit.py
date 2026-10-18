@@ -80,7 +80,11 @@ def get_bar_types(doc):
             continue
         seen.add(n)
         dm, dn = _bt_diams(bt)
-        out.append({'name': n, 'dm': dm, 'dn': dn, 'elem': bt})
+        try:
+            bend = bt.StandardBendDiameter * FT       # diametro de doblez (pata mas corta que Revit puede hacer)
+        except Exception:
+            bend = None
+        out.append({'name': n, 'dm': dm, 'dn': dn, 'elem': bt, 'bend': bend})
     out.sort(key=lambda d: (d['dn'], d['name']))
     return out
 
