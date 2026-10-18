@@ -1,0 +1,342 @@
+[
+ {
+  "muro": "M-8",
+  "x": 9.2,
+  "y": 24.0,
+  "bordes": [
+   "2EST.#3@15cm",
+   "8VARS#4",
+   "8VARS#4",
+   "2EST.#3@15cm"
+  ],
+  "acero": [
+   " VERTICAL #3@30cm",
+   "HORIZONTAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30,
+   40
+  ]
+ },
+ {
+  "muro": "M-28",
+  "x": 111.6,
+  "y": 23.7,
+  "bordes": [
+   "16VARS#4",
+   "3EST.#3+2GR.#3@15cm",
+   "16VARS#4",
+   "3EST.#3+2GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   60,
+   100
+  ]
+ },
+ {
+  "muro": "M-12",
+  "x": 60.8,
+  "y": 22.5,
+  "bordes": [
+   "10VARS#4",
+   "2EST.#3+1GR#3@15cm",
+   "2EST.#3@15cm",
+   "| 8VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   40,
+   60
+  ]
+ },
+ {
+  "muro": "M-29",
+  "x": 128.6,
+  "y": 19.4,
+  "bordes": [
+   "12VAR#4 2EST.#3+1GR.#3@15cm",
+   "14VARS#4",
+   "3EST.#3+1GR.#3@15cm",
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30,
+   60,
+   100
+  ]
+ },
+ {
+  "muro": "M-14",
+  "x": 71.6,
+  "y": 16.2,
+  "bordes": [
+   "14VARS#4",
+   "3EST.#3+1GR#3@15cm",
+   "14VARS#4",
+   "3EST.#3+1GR#3@15cm",
+   "22VARS#6 5EST.#3+1GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   120,
+   200
+  ]
+ },
+ {
+  "muro": "M-11",
+  "x": 21.3,
+  "y": 15.5,
+  "bordes": [
+   "12VARS#4",
+   "3EST.#3@15cm",
+   "14VARS#4",
+   "3EST.#3+1GR#3@15cm",
+   "22VARS#6 5EST.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30,
+   100,
+   185
+  ]
+ },
+ {
+  "muro": "M-10",
+  "x": 8.3,
+  "y": 14.9,
+  "bordes": [
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "2EST.#3@15cm",
+   "8VARS#4",
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30
+  ]
+ },
+ {
+  "muro": "M-34",
+  "x": 132.7,
+  "y": 13.7,
+  "bordes": [
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   40
+  ]
+ },
+ {
+  "muro": "M-30",
+  "x": 108.3,
+  "y": 13.5,
+  "bordes": [
+   "8VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "8VARS#4",
+   "2EST.#3@15cm",
+   "8VARS#4",
+   "1EST.#3+1GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   60
+  ]
+ },
+ {
+  "muro": "M-32",
+  "x": 121.5,
+  "y": 13.5,
+  "bordes": [
+   "8VARS#4",
+   "2EST.#3@15CM",
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4",
+   "1EST.#3@15cm",
+   "6VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   40
+  ]
+ },
+ {
+  "muro": "M-31A Y M-33",
+  "x": 115.3,
+  "y": 8.6,
+  "bordes": [
+   "2EST.#3@15cm",
+   "8VARS#4",
+   "1EST.#3@15cm",
+   "6VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30
+  ]
+ },
+ {
+  "muro": "M-31 Y M-33",
+  "x": 107.1,
+  "y": 8.5,
+  "bordes": [
+   "2EST.#3@15cm",
+   "8VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30
+  ]
+ },
+ {
+  "muro": "M-35",
+  "x": 132.1,
+  "y": 8.3,
+  "bordes": [
+   "6VARS#6",
+   "1EST.#3+1GR.#3@15cm",
+   "1EST.#3+1GR.#3@15cm",
+   "6VARS#4",
+   "1EST.#3@15cm",
+   "6VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30
+  ]
+ },
+ {
+  "muro": "M-13",
+  "x": 60.7,
+  "y": 6.7,
+  "bordes": [
+   "8VARS#4",
+   "2EST.#3@15cm",
+   "16VARS#4",
+   "3EST.#3+2GR#3@15cm",
+   "1EST.#3@15cm",
+   "6VARS#4",
+   "3EST.#3@15cm",
+   "| 12VARS#4"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   40,
+   60,
+   100
+  ]
+ },
+ {
+  "muro": "M-1",
+  "x": 23.3,
+  "y": 3.5,
+  "bordes": [
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "22VAR#6 5EST.#3+1GR#3@15cm",
+   "6VARS#4",
+   "1EST.#3+1GR.#3@15cm",
+   "40VAR#6 10EST.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30,
+   200
+  ]
+ },
+ {
+  "muro": "M-36 Y M-33A",
+  "x": 123.0,
+  "y": 3.5,
+  "bordes": [
+   "1EST.#3@15cm",
+   "6VARS#4",
+   "1EST.#3@15cm",
+   "6VARS#4",
+   "8VAR#6 2EST.#3@15cm",
+   "6VARS#6",
+   "1EST.#3+1GR.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30
+  ]
+ },
+ {
+  "muro": "M-15",
+  "x": 78.9,
+  "y": 3.1,
+  "bordes": [
+   "6VAR#4 1EST.#3+1GR#3@15cm",
+   "14VAR#6 2VAR#4 4EST.#3@15cm",
+   "32VAR#6 8EST.#3@15cm"
+  ],
+  "acero": [
+   "HORIZONTAL #3@30cm",
+   "VERTICAL #3@30cm"
+  ],
+  "cotas_cm": [
+   30,
+   120,
+   200
+  ]
+ }
+]
