@@ -447,6 +447,61 @@ def above_walls(doc, wall, fr, m):
     return out
 
 
+def below_walls(doc, wall, fr, m, gap=90.0):
+    """Muros abajo de este (paralelos, con su corona en la base de este o bajo la losa que los separa, hasta gap
+    cm): su extension en (s, x) de este muro, en cm. Las verticales que siguen de ese muro arrancan sin pata
+    (traslapan con su espera)."""
+    out = []
+    try:
+        walls = [w for w in FilteredElementCollector(doc).OfClass(Wall)]
+    except Exception:
+        return out
+    lc = (m['l_min'] + m['l_max']) / 2.0
+    tol_z = 5.0 / FT
+    for w in walls:
+        try:
+            if w is wall or eid_int(w.Id) == eid_int(wall.Id):
+                continue
+        except Exception:
+            continue
+        crv = getattr(getattr(w, 'Location', None), 'Curve', None)
+        if not isinstance(crv, Line):
+            continue
+        dd = crv.Direction
+        n = math.hypot(dd.X, dd.Y)
+        if n < 1e-9 or abs((dd.X * fr.u.X + dd.Y * fr.u.Y) / n) < 0.99:       # paralelo
+            continue
+        a, b = crv.GetEndPoint(0), crv.GetEndPoint(1)
+        if abs(fr.l(a) - lc) > 3.0:
+            continue
+        sa, sb = sorted((fr.s(a), fr.s(b)))
+        if sb < m['s_min'] or sa > m['s_max']:
+            continue
+        try:
+            m2 = _measure(_wall_solids(w), fr)
+        except Exception:
+            m2 = None
+        if m2 is None:
+            m2 = _measure_params(doc, w, fr, crv)
+        if m2 is None:
+            continue
+        if not (m['z_min'] - gap / FT <= m2['z_max'] <= m['z_min'] + tol_z) or m2['z_min'] >= m['z_min'] - 10.0 / FT:
+            continue
+        s0, s1 = max(m2['s_min'], m['s_min']), min(m2['s_max'], m['s_max'])
+        if (s1 - s0) * FT < 10.0:
+            continue
+        mk = u''
+        try:
+            mk = w.get_Parameter(BuiltInParameter.ALL_MODEL_MARK).AsString() or u''
+        except Exception:
+            pass
+        out.append({'s0': round((s0 - m['s_min']) * FT, 2), 's1': round((s1 - m['s_min']) * FT, 2),
+                    'x0': round((m2['l_min'] - lc) * FT, 2), 'x1': round((m2['l_max'] - lc) * FT, 2),
+                    't': round((m2['l_max'] - m2['l_min']) * FT, 2), 'name': mk or u'Id %d' % eid_int(w.Id),
+                    'id': eid_int(w.Id)})
+    return out
+
+
 def analyze_wall(doc, wall):
     """Devuelve (info, None) o (None, motivo)."""
     crv = getattr(getattr(wall, 'Location', None), 'Curve', None)
@@ -514,6 +569,10 @@ def analyze_wall(doc, wall):
         info['above'] = above_walls(doc, wall, fr, m)
     except Exception:
         info['above'] = []
+    try:
+        info['below'] = below_walls(doc, wall, fr, m)
+    except Exception:
+        info['below'] = []
     # elementos de concreto arriba de la corona (continuidad de las esperas)
     try:
         lc_ = info['l_c']
@@ -632,6 +691,7 @@ def make_model(info):
                     info['base_name'], info['top_name'])
     m.ends = dict(info.get('ends') or {})          # muros transversales en los extremos
     m.above = list(info.get('above') or [])         # muros apoyados encima (esperas que no caben)
+    m.below = list(info.get('below') or [])         # muros abajo (las verticales que siguen arrancan sin pata)
     m.top_parts = info.get('top_parts')             # elementos arriba (esperas sin continuidad)
     return m
 

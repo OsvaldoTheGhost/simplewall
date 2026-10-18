@@ -42,6 +42,7 @@ class WallModel(object):
         self.openings = find_openings(self.loops, self.L, self.H)
         self.ends = {}       # muro transversal en cada extremo: {'L' / 'R': {'e', 't', 'name'}} (aw_revit)
         self.above = []      # muros apoyados encima: [{'s0', 's1', 'x0', 'x1', 't', 'name'}] (cm, coords. del muro)
+        self.below = []      # muros abajo (continuidad): mismo formato; ahi las verticales arrancan sin pata
         self.top_parts = None    # elementos de concreto arriba (armado_continuidad); None = no se leyeron
 
     def stories(self):
@@ -963,6 +964,17 @@ def compute(model, cfg, zones, bts, extra=None):
             return False                      # sin muro encima en esa posicion: la espera sigue
         return not any(a['x0'] + c - 0.5 <= x - db / 2.0 and x + db / 2.0 <= a['x1'] - c + 0.5 for a in over)
 
+    below = getattr(model, 'below', None) or []
+
+    def cont_below(s, x):
+        """La vertical sigue de un muro de abajo (su espera llega aqui): arranca en la base, sin pata."""
+        if x is None:
+            return False
+        for bw in below:
+            if bw['s0'] - 0.5 <= s <= bw['s1'] + 0.5 and bw['x0'] + 0.5 * c <= x <= bw['x1'] - 0.5 * c:
+                return True
+        return False
+
     lv_up = level_above(model) if g.get('lap_level', True) else None
     lvl_top = lv_up[1] if lv_up else None
     # sin muro ni columna arriba: la espera remata con pata en la corona (o dentro de la losa / trabe de arriba)
@@ -999,7 +1011,10 @@ def compute(model, cfg, zones, bts, extra=None):
             # sin extension (0 o negativa) la varilla respeta el recubrimiento en la base / la corona del muro;
             # con pata, el eje de la pata queda medio diametro mas adentro (la pata no se sale del concreto)
             eb, et = float(g['ext_bot']), float(g['ext_top'])
-            if base:
+            cb = bool(base and cont_below(s, x))
+            if cb:
+                a = -eb if eb > 0 else 0.0           # traslapa con la espera del muro de abajo
+            elif base:
                 a = -eb if eb > 0 else max(-eb, c + (db / 2.0 if g['hook_bot'] else 0.0))
             else:
                 a = z0 + c
@@ -1026,7 +1041,8 @@ def compute(model, cfg, zones, bts, extra=None):
                 # 5o valor: z de la bayoneta, 'S' si la pieza va desfasada, o None
                 mark = zc if style == 'crank' else ('S' if (style == 'offset' and i % 2) else None)
                 rm = bool(remate and lst)
-                out.append((za, zb, bool(g['hook_bot'] and base and fst), bool((g['hook_top'] or rm) and top and lst),
+                out.append((za, zb, bool(g['hook_bot'] and base and fst and not cb),
+                            bool((g['hook_top'] or rm) and top and lst),
                             mark, rm, why if rm else None))
         return out
 

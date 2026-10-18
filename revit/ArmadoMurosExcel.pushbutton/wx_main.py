@@ -339,11 +339,42 @@ def own_bars(walls):
     return [rb for rb in AL.hosted(walls) if AL.comment(rb).startswith(R.TAG)]
 
 
-def _rec(name, z, wall, mu, settings, mk_on):
+def _pd(el, bip):
+    try:
+        p = el.get_Parameter(bip)
+        return p.AsDouble() if p is not None else None
+    except Exception:
+        return None
+
+
+def ref_level(wall, name, z, level, levels, mode):
+    """Nivel al que pertenece el acero del muro: (nombre, elevacion m, Level). 'Superior': el nivel de arriba del
+    entrepiso (los planos ven la planta por debajo): la restriccion superior del muro o, si no tiene, el primer
+    nivel en / arriba de su corona (hasta 0.60 m abajo, por la losa). 'Base': el nivel de arranque."""
+    if C.fold(mode or u'').startswith(u'base'):
+        return name, z, level
+    try:
+        top = wall.get_Parameter(BuiltInParameter.WALL_HEIGHT_TYPE).AsElementId()
+        for n, zz, l in levels:
+            if l.Id == top and zz > z + 0.5:
+                return n, zz, l
+    except Exception:
+        pass
+    h = _pd(wall, BuiltInParameter.WALL_USER_HEIGHT_PARAM)
+    if h:
+        zt = z + _m((_pd(wall, BuiltInParameter.WALL_BASE_OFFSET) or 0.0) + h)
+        for n, zz, l in levels:                  # ordenados por elevacion
+            if zz >= zt - 0.60 and zz > z + 0.5:
+                return n, zz, l
+    return name, z, level
+
+
+def _rec(name, z, wall, mu, settings, mk_on, ref=None):
     tn = wall_type(wall) or mu
+    rn, rz = (ref[0], ref[1]) if ref else (name, z)
     return {'nivel': C.level_label(name), 'muro': tn, 'id': R.eid_int(wall.Id), 'estado': u'', 'kg': 0.0,
-            'errores': [], 'avisos': [], 'creados': 0, 'borrados': 0, 'L': 0.0, 't': 0.0, 'H': 0.0,
-            'montaje': C.assembly_name(settings.get('montaje_fmt'), C.wall_mark(tn), name, z) if mk_on else u''}
+            'errores': [], 'avisos': [], 'creados': 0, 'borrados': 0, 'L': 0.0, 't': 0.0, 'H': 0.0, '_ref': ref,
+            'montaje': C.assembly_name(settings.get('montaje_fmt'), C.wall_mark(tn), rn, rz) if mk_on else u''}
 
 
 def _ends_xy(info):
@@ -468,7 +499,8 @@ def run(doc, uidoc, apply_mode):
                 # analisis de todos los muros del nivel
                 items = []
                 for mu, row, w in sorted(lst, key=lambda t: R.eid_int(t[2].Id)):
-                    rec = _rec(name, z, w, mu, settings, ctx['mk_on'])
+                    ref = ref_level(w, name, z, level, levels, settings.get('nivel_ref'))
+                    rec = _rec(name, z, w, mu, settings, ctx['mk_on'], ref)
                     try:
                         info, err = R.analyze_wall(doc, w)
                     except Exception as ex:
@@ -581,10 +613,11 @@ def _after_build(doc, rec, wall, wr, name, z, level, ctx):
     if ctx['pname']:
         try:
             own = own_bars([wall])
-            value = ctx['pfmt'].replace(u'{elev}', C.elev_txt(z)).replace(u'{nivel}', name)
+            rn, rz, rl = rec.get('_ref') or (name, z, level)      # nivel al que pertenece el acero
+            value = ctx['pfmt'].replace(u'{elev}', C.elev_txt(rz)).replace(u'{nivel}', rn)
             t = Transaction(doc, u'Parámetro de nivel en varillas')
             t.Start()
-            n = set_level_param(own, ctx['pname'], value, level)
+            n = set_level_param(own, ctx['pname'], value, rl)
             t.Commit()
             if own and not n:
                 rec['avisos'].append(u'las varillas no tienen el parámetro "%s" (o es de solo lectura)' % ctx['pname'])

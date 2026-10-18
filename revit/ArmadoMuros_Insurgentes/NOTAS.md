@@ -23,3 +23,10 @@ Excel para el botón de pyRevit "Armado de muros" (hoja **Armado**), leído del 
 - **Azotea ("ROOF - TECHOS")**: pasada a la hoja Armado (filas `+30.55`). Extremos asignados por la posición de las etiquetas del DWG: revisar en el reporte. Datos crudos en la hoja "Azotea (pendiente)" y en `azotea_roof_techos.json`.
   Muros: M-1, M-8, M-10 a M-15, M-28 a M-36 (M-31A y M-33A incluidos).
 - Correr **Revisar** con el Excel en el modelo.
+
+## Cambios del motor (ArmadoMuro / ArmadoMurosExcel)
+
+- Verticales que siguen de un muro de abajo: arrancan en la base **sin pata** (traslapan con la espera).
+- **Nivel del acero = Superior** (Configuracion): el acero de un entrepiso pertenece al nivel de arriba
+  (muros de +4.70 a +7.55 → NIVEL +7.55) en el parámetro Nivel y en el nombre del montaje.
+- Montajes idénticos en distintos niveles: cada uno con su propio tipo/nombre; nombre también en Comentarios.

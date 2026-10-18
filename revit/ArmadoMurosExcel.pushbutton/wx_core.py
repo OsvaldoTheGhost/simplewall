@@ -55,6 +55,8 @@ SETTINGS = [
     ('first', u'Primer estribo (cm)', u'5', u'Desde la base / la corona'),
     ('op_ext', u'Anclaje refuerzo de huecos (cm)', u'60', u'Para "2#5" sin longitud'),
     ('replace', u'Reemplazar armado previo', u'Sí', u'Sí = borra el armado que hizo la herramienta en ese muro'),
+    ('nivel_ref', u'Nivel del acero', u'Superior', u'Superior = el acero de un entrepiso pertenece al nivel de arriba (la planta se ve por debajo: '
+                  u'muros de +4.70 a +7.55 -> +7.55); Base = nivel de arranque del muro. Aplica al parámetro de nivel y al montaje'),
     ('param', u'Parámetro de nivel en varillas', u'Nivel', u'Vacío = no se llena'),
     ('param_fmt', u'Valor del parámetro de nivel', u'NIVEL {elev}', u'{elev} = +7.55, {nivel} = nombre del nivel'),
     ('montaje', u'Crear montajes', u'Sí', u'Sí = un montaje por muro con su acero'),
