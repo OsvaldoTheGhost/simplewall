@@ -32,3 +32,9 @@ El botón une las secciones de una trabe que se tocan en el modelo. Donde el pla
 separadas se arman por partes con corchetes: `T-5 (viga 2) [S1, S2]` / `[S3]`, `T-6 (viga 2) [S2]` / `[S3]`,
 `EJE-5 [S1]` / `[S2]` (Roof) y `T- EJE 3 [S2]` / `[S1]` (Techos). Siguen unidas (continuas en el plano):
 EJE-B, EJE-1', EJE-2, T-11.
+
+## Partes por tramos (vigas de un solo tipo separadas en el plano)
+
+`[T1-2]` / `[T3]` arma solo las trabes de esos tramos como viga aparte. Repasada contra los cajones del plano:
+Roof EJE-J, T-2 (vigas 1 y 2), T-2' (viga 1), T-6 (viga 1); Techos T-EJE K, T- 7 (vigas 1 y 2).
+Archivos `Correccion_*.xlsx`: solo las trabes corregidas (aplicar con Reemplazar = Sí).

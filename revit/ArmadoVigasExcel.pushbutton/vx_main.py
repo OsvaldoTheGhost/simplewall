@@ -381,6 +381,7 @@ def _help_rows():
                u'también "T-2 (viga 2)". Sin paréntesis = todas las vigas que no tengan su propia fila. '
                u'Si en el plano las secciones de una viga van separadas, arme cada parte aparte con corchetes: '
                u'"T-5 (viga 2) [S1, S2]" y "T-5 (viga 2) [S3]" (tramos numerados desde 1 en cada parte). '
+               u'Si es un solo tipo, por tramos de la plantilla: "EJE-J [T1-2]" y "EJE-J [T3]". '
                u'También acepta el tipo de Revit (T-5 Seccion 1) para armar solo esa sección.'],
         [u'4', u'Tramo: 1, 2, 3... en el sentido en que la plantilla los lista. Una fila con Tramo = "todos" '
                u'sirve de valor por defecto para los tramos que dejen la celda vacía.'],
@@ -619,6 +620,7 @@ def run(doc, uidoc, apply_mode):
             sels.setdefault((C.fold(lv_txt), C.norm_beam(nm)), []).append(sel)
     for lv_txt, tb, grows in groups:
         tb_full = tb
+        spans_sel = C.split_spans_sel(tb)
         tb, secs = C.split_sections(tb)
         tb, sel = C.split_selector(tb)
         lvs, errs = C.resolve_levels(lv_txt, [(n, z) for n, z, _ in levels])
@@ -634,7 +636,7 @@ def run(doc, uidoc, apply_mode):
                                'errores': [u'fila %s: no hay trabes tipo "%s" en la familia "%s"' % (r0, tb, fam)]})
                 continue
             others = [] if sel else sels.get((C.fold(lv_txt), C.norm_beam(tb)), [])
-            plan.append((tb, grows, name, z, level, fam, beams, sel, others, tb_full, secs))
+            plan.append((tb, grows, name, z, level, fam, beams, sel, others, tb_full, secs, spans_sel))
     if not plan:
         _print_report(report, fatal, apply_mode, path)
         return
@@ -656,7 +658,7 @@ def run(doc, uidoc, apply_mode):
         tg.Start()
     try:
         with SafeProgress(u'Armando trabes ({value} de {max_value})') as pb:
-            for k, (tb, grows, name, z, level, fam, beams, sel, others, tb_full, secs) in enumerate(plan):
+            for k, (tb, grows, name, z, level, fam, beams, sel, others, tb_full, secs, spans_sel) in enumerate(plan):
                 if pb.cancelled:
                     fatal.append(u'Cancelado por el usuario después de %d trabes.' % k)
                     break
@@ -682,6 +684,40 @@ def run(doc, uidoc, apply_mode):
                             report.append({'nivel': C.level_label(name), 'trabe': tb_full, 'estado': u'Error',
                                            'errores': [u'fila %s: la viga no tiene secciones %s' %
                                                        (grows[0].get('_row'), u', '.join(u'%d' % n for n in secs))]})
+                            continue
+                        try:
+                            info, errs = R.analyze_chain(doc, sub)
+                        except Exception as ex:
+                            info, errs = None, [(sub[0], u'%s' % ex)]
+                    if spans_sel and info is not None:
+                        # solo las trabes de esos tramos (por la posicion de cada trabe en la viga)
+                        m0 = make_model(info)
+                        ns = m0.n_spans
+                        bad_idx = [i + 1 for i in spans_sel if i >= ns]
+                        if bad_idx:
+                            report.append({'nivel': C.level_label(name), 'trabe': tb_full, 'estado': u'Error',
+                                           'errores': [u'fila %s: la viga tiene %d tramos; no hay tramo %s' %
+                                                       (grows[0].get('_row'), ns, u', '.join(u'%d' % i for i in bad_idx))]})
+                            continue
+                        lo = m0.nodes[min(spans_sel)].s0
+                        hi = m0.nodes[max(spans_sel) + 1].s1
+                        parts = info.get('parts') or []
+                        sub, cross = [], []
+                        for c, q in zip(info['chain'], parts):
+                            a_, b_ = q[0], q[1]
+                            mid_ = (a_ + b_) / 2.0
+                            if lo - 1.0 <= mid_ <= hi + 1.0:
+                                sub.append(c['elem'])
+                                if a_ < lo - 30.0 or b_ > hi + 30.0:
+                                    cross.append(R.eid_int(c['elem'].Id))
+                        tag += u' [T%s]' % u','.join(u'%d' % (i + 1) for i in spans_sel)
+                        if not sub or cross:
+                            report.append({'nivel': C.level_label(name), 'trabe': tb_full, 'estado': u'Error',
+                                           'errores': [u'fila %s: %s' % (grows[0].get('_row'),
+                                                       (u'la trabe Id %s pasa de esos tramos a otros: divídala en '
+                                                        u'Revit en el apoyo para armar cada parte aparte'
+                                                        % u', '.join(u'%d' % x for x in cross)) if cross else
+                                                       u'ninguna trabe en esos tramos')]})
                             continue
                         try:
                             info, errs = R.analyze_chain(doc, sub)

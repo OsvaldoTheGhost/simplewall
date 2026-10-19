@@ -147,8 +147,26 @@ def split_sections(name):
     m = _SECS.match(t)
     if not m or not m.group(1):
         return t, []
-    nums = [int(x) for x in re.findall(r'\d+', m.group(2))]
+    nums = []
+    for tok in re.split(r'[,;\s]+', m.group(2)):
+        if re.match(r'^[Tt]', tok):
+            continue                                  # tramos: ver split_spans_sel
+        nums += [int(x) for x in re.findall(r'\d+', tok)]
     return m.group(1).strip(), nums
+
+
+def split_spans_sel(name):
+    """'EJE-J [T1-2]' -> [0, 1] (indices de tramo); 'EJE-J [T3]' -> [2]; sin T -> [].
+    Arma solo las trabes de esos tramos como una viga aparte (piezas separadas en el plano)."""
+    m = _SECS.match(clean(name))
+    if not m:
+        return []
+    out = []
+    for a, b in re.findall(r'[Tt]\s*(\d+)(?:\s*-\s*[Tt]?\s*(\d+))?', m.group(2)):
+        a = int(a)
+        b = int(b) if b else a
+        out += list(range(min(a, b) - 1, max(a, b)))
+    return sorted(set(out))
 
 
 def section_no(type_name):
