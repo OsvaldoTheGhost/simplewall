@@ -136,6 +136,43 @@ def norm_beam(name):
     return s
 
 
+_SEL = re.compile(r'^(.*?)\s*\(\s*([^()]*?)\s*\)\s*$')
+
+
+def split_selector(name):
+    """'EJE-10 (K-H)' -> ('EJE-10', 'K-H'); 'T-2 (viga 2)' -> ('T-2', 'viga 2'); 'T-4' -> ('T-4', u'').
+    El parentesis elige una de las vigas separadas de esa trabe (por los ejes que cruza o por su numero)."""
+    t = clean(name)
+    m = _SEL.match(t)
+    if not m or not m.group(1):
+        return t, u''
+    return m.group(1).strip(), m.group(2).strip()
+
+
+def is_mark(name):
+    """True si el nombre es la trabe del plano (sin 'Seccion n'): se arman juntas todas sus secciones."""
+    t = clean(name)
+    return not re.search(r'\s+(secci[oó]n|secc?\.?|s)\s*\d+\s*$', t, flags=re.I)
+
+
+def grid_key(name):
+    """'EJE K' == 'Eje-K' == 'k'; "1'" == "1'"."""
+    s = fold(name).replace(u'’', u"'").replace(u'´', u"'")
+    s = re.sub(r'^(eje|ejes)\s*-?\s*', u'', s)
+    return re.sub(r'[\s\-]+', u'', s)
+
+
+def selector_tokens(sel):
+    """'K-H' / 'K a H' / 'ejes K, H' -> ['k', 'h']; 'viga 2' / '2' -> 2 (indice de viga, 1..)."""
+    t = fold(sel)
+    m = re.match(r'^(?:viga|v|#)?\s*(\d+)$', t)
+    if m and not re.match(r'^\d+$', t):
+        return int(m.group(1))
+    t = re.sub(r'^(ejes?)\s+', u'', t)
+    parts = [grid_key(x) for x in re.split(r'\s*(?:-|–|,|;|/|\s+a\s+|\s+al\s+|\s+y\s+)\s*', t) if x.strip()]
+    return [x for x in parts if x]
+
+
 # ================================================================== niveles
 _LV_RANGE = re.compile(r'^(?:n(?:ivel)?\s*)?(\d+)\s*(?:-|a|al|–)\s*(?:n(?:ivel)?\s*)?(\d+)$')
 _LV_ONE = re.compile(r'^(?:n(?:ivel)?\s*)?(\d+)$')

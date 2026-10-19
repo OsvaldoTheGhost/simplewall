@@ -18,7 +18,7 @@ import traceback
 from pyrevit import forms, script
 from Autodesk.Revit.DB import (FilteredElementCollector, BuiltInCategory, BuiltInParameter, Level,
                                Transaction, TransactionGroup, StorageType, UnitUtils, UnitTypeId,
-                               AssemblyInstance, AssemblyType, ElementId)
+                               AssemblyInstance, AssemblyType, ElementId, Grid, Line)
 from System.Collections.Generic import List
 
 import bv_geom as G
@@ -112,6 +112,8 @@ class BeamIndex(object):
     def __init__(self, doc):
         self.by_fam = {}
         self.by_lvl = {}
+        self.by_mark = {}            # (familia, trabe del plano) -> trabes de todas sus secciones
+        self.by_mark_lvl = {}
         self.families = {}
         col = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFraming) \
             .WhereElementIsNotElementType()
@@ -123,15 +125,28 @@ class BeamIndex(object):
                 continue
             self.families.setdefault(C.fold(fam), fam)
             self.by_fam.setdefault((C.fold(fam), C.norm_beam(tn)), []).append(b)
+            mk = C.norm_beam(C.beam_mark(tn))
+            self.by_mark.setdefault((C.fold(fam), mk), []).append(b)
             try:
                 lid = R.eid_int(b.get_Parameter(BuiltInParameter.INSTANCE_REFERENCE_LEVEL_PARAM).AsElementId())
             except Exception:
                 lid = None
             if lid is not None:
                 self.by_lvl.setdefault((lid, C.norm_beam(tn)), []).append(b)
+                self.by_mark_lvl.setdefault((lid, mk), []).append(b)
 
     def find(self, fam, level, beam):
+        """Trabes de un tipo ('T-5 Seccion 1') o, si el nombre es la trabe del plano sin seccion ('T-5', 'EJE-B'),
+        de todas sus secciones: se arman como una sola viga (los bastones pasan el cambio de seccion)."""
         k = C.norm_beam(beam)
+        if C.is_mark(beam):
+            hit = self.by_mark.get((C.fold(fam), k))
+            if hit:
+                return hit, u'familia'
+            if C.fold(fam) not in self.families:
+                hit = self.by_mark_lvl.get((R.eid_int(level.Id), k))
+                if hit:
+                    return hit, u'nivel'
         hit = self.by_fam.get((C.fold(fam), k))
         if hit:
             return hit, u'familia'
@@ -140,6 +155,13 @@ class BeamIndex(object):
             if hit:
                 return hit, u'nivel'
         return [], None
+
+    def marks_of(self, fam):
+        """{trabe del plano: [trabes de todas sus secciones]} de una familia."""
+        out = {}
+        for tn, els in self.types_of(fam).items():
+            out.setdefault(C.beam_mark(tn), []).extend(els)
+        return out
 
     def types_of(self, fam):
         """{tipo: [trabes]} de una familia."""
@@ -226,6 +248,99 @@ def chains(doc, beams):
     return out
 
 
+def grid_lines(doc):
+    """[(clave, nombre, p (XY), d (XY unitario))] de las reticulas rectas del modelo."""
+    out = []
+    for g in FilteredElementCollector(doc).OfClass(Grid):
+        try:
+            c = g.Curve
+            if not isinstance(c, Line):
+                continue
+            a, b = c.GetEndPoint(0), c.GetEndPoint(1)
+            dx, dy = b.X - a.X, b.Y - a.Y
+            n = (dx * dx + dy * dy) ** 0.5
+            if n < 1e-6:
+                continue
+            nm = R.el_name(g)
+            out.append((C.grid_key(nm), nm, (a.X, a.Y), (dx / n, dy / n)))
+        except Exception:
+            pass
+    return out
+
+
+def chain_grids(info, grids, tol_ft=1.0):
+    """Ejes que cruza la viga (en orden a lo largo de ella): [(posicion, clave, nombre)].
+    Ejes de inicio y fin = los mas cercanos a cada extremo."""
+    pts = []
+    for c in info['chain']:
+        try:
+            a, b = _ends(c['elem'])
+            pts += [(a.X, a.Y), (b.X, b.Y)]
+        except Exception:
+            pass
+    if len(pts) < 2:
+        return [], None, None
+    best = None
+    for p in pts:
+        for q in pts:
+            d = ((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2) ** 0.5
+            if best is None or d > best[0]:
+                best = (d, p, q)
+    L, P, Q = best
+    if L < 1e-6:
+        return [], None, None
+    ux, uy = (Q[0] - P[0]) / L, (Q[1] - P[1]) / L
+    hits = []
+    for key, nm, g0, gd in grids:
+        cr = ux * gd[1] - uy * gd[0]
+        if abs(cr) < 0.5:                           # paralelo a la viga
+            continue
+        # interseccion de la recta de la viga con la reticula: P + t u
+        t = ((g0[0] - P[0]) * gd[1] - (g0[1] - P[1]) * gd[0]) / cr
+        if -tol_ft <= t <= L + tol_ft:
+            hits.append((t, key, nm))
+    hits.sort()
+    s_ = min(hits, key=lambda h: abs(h[0])) if hits else None
+    e_ = min(hits, key=lambda h: abs(h[0] - L)) if hits else None
+    return hits, s_, e_
+
+
+def chain_label(info, grids):
+    """'K-H': ejes de los extremos de la viga (para elegirla en el Excel)."""
+    hits, s_, e_ = chain_grids(info, grids)
+    if not s_ or not e_ or s_[1] == e_[1]:
+        return u''
+    return u'%s-%s' % (C.grid_key(s_[2]).upper(), C.grid_key(e_[2]).upper())
+
+
+def pick_chains(chs, sel, grids, claimed=()):
+    """Vigas separadas de una trabe que corresponden al selector del Excel ('K-H', 'viga 2' o vacio).
+    Sin selector: las que ningun otro renglon de la misma trabe eligio. Devuelve ([(indice, (info, errs))], error)."""
+    idx = list(enumerate(chs))
+    if not sel:
+        return [x for x in idx if x[0] not in claimed], None
+    tok = C.selector_tokens(sel)
+    if isinstance(tok, int):
+        if 1 <= tok <= len(chs):
+            return [idx[tok - 1]], None
+        return [], u'la trabe tiene %d viga(s); no hay "viga %d"' % (len(chs), tok)
+    scored = []
+    for i, (info, errs) in idx:
+        if info is None:
+            continue
+        hits, s_, e_ = chain_grids(info, grids)
+        keys = set(h[1] for h in hits)
+        if not all(t in keys for t in tok):
+            continue
+        ends = set(x[1] for x in (s_, e_) if x)
+        scored.append((0 if ends == set(tok) else 1, i))
+    if not scored:
+        labels = [chain_label(info, grids) for info, _ in chs if info is not None]
+        return [], u'ninguna viga de esta trabe cruza los ejes "%s" (vigas: %s)' % (sel, u', '.join(l or u'?' for l in labels))
+    best = min(sc for sc, _ in scored)
+    return [idx[i] for sc, i in scored if sc == best], None
+
+
 def make_model(info):
     """Igual que la ventana de Armado Viga (bv_main.Session.load)."""
     model = G.BeamModel(info['b'], info['h'], info['L'], info['supports'], parts=info.get('parts'),
@@ -260,7 +375,11 @@ def _help_rows():
                u'botón detecta en el modelo: apoyos, longitud libre y sección (columnas grises, solo informativas).'],
         [u'2', u'Niveles: N2 = "Nivel 2". Para repetir el mismo armado en varios niveles escriba N2-N4 (o N2,N3,N5) '
                u'en todas las filas de esa trabe. También acepta la elevación: +7.55.'],
-        [u'3', u'Trabe: nombre del tipo en Revit (T EJE-K, T-5 Seccion 1...). Acepta "TRABE EJE-K" o "T-5 S1".'],
+        [u'3', u'Trabe: la trabe del plano (EJE-K, T-5): se arman juntas todas sus secciones (T-5 Seccion 1, 2...) '
+               u'como una sola viga y los bastones pasan el cambio de sección. Si hay varias vigas separadas con la '
+               u'misma trabe, cada una lleva entre paréntesis los ejes de sus extremos: "EJE-10 (K-H)", "T-2 (1\'-2)"; '
+               u'también "T-2 (viga 2)". Sin paréntesis = todas las vigas que no tengan su propia fila. '
+               u'También acepta el tipo de Revit (T-5 Seccion 1) para armar solo esa sección.'],
         [u'4', u'Tramo: 1, 2, 3... en el sentido en que la plantilla los lista. Una fila con Tramo = "todos" '
                u'sirve de valor por defecto para los tramos que dejen la celda vacía.'],
         [u'5', u'Sup. / Inf. corrido: 3#4. Si es igual en todos los tramos queda corrido de extremo a extremo con '
@@ -311,12 +430,13 @@ def generate_template(doc):
     if not path:
         return
     rows = [[c[1] for c in C.COLUMNS]]
+    grids = grid_lines(doc)
     problems = []
     total = 0
     with SafeProgress(u'Analizando trabes ({value} de {max_value})') as pb:
         work = []
         for o in chosen:
-            for tn, els in sorted(idx.types_of(o[4]).items(), key=lambda kv: natural_key(kv[0])):
+            for tn, els in sorted(idx.marks_of(o[4]).items(), key=lambda kv: natural_key(kv[0])):
                 work.append((o, tn, els))
         for k, (o, tn, els) in enumerate(work):
             if pb.cancelled:
@@ -332,25 +452,38 @@ def generate_template(doc):
                 rows.append([lab, tn, u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'',
                              u'', u'No se pudo analizar: ' + u'; '.join(u'%s' % e for _, e in errs)])
                 continue
-            info = good[0][0]
-            model = make_model(info)
-            notes = []
-            if len(good) > 1:
-                ns = [make_model(i).n_spans for i, _ in good]
-                notes.append(u'%d vigas separadas con este tipo (tramos: %s); todas se arman con estas filas'
-                             % (len(good), u', '.join(u'%d' % n for n in ns)))
-                if len(set(ns)) > 1:
-                    notes.append(u'OJO: no tienen los mismos tramos; si su armado es distinto, deles tipos distintos')
-            if bad:
-                notes.append(u'%d trabe(s) del tipo no se pudieron analizar' % sum(len(e) for e in bad))
-            note = u'; '.join(notes)
-            for i in range(model.n_spans):
-                fa, fb = model.span_faces(i)
-                sc = model.sec(i)
-                rows.append([lab, tn, i + 1, node_txt(model, i), node_txt(model, i + 1),
-                             round((fb - fa) / 100.0, 2), u'%sx%s' % (G.fcm_(round(sc['b'], 1)), G.fcm_(round(sc['h'], 1))),
-                             u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', note if i == 0 else u''])
-                total += 1
+            labels = [chain_label(i, grids) for i, _ in good]
+            for gi, (info, _e) in enumerate(good):
+                model = make_model(info)
+                notes = []
+                # nombre de la viga en el Excel: la trabe del plano y, si hay varias, los ejes de sus extremos
+                name = tn
+                if len(good) > 1:
+                    lb = labels[gi]
+                    if not lb or labels.count(lb) > 1:
+                        lb = u'viga %d' % (gi + 1)
+                    name = u'%s (%s)' % (tn, lb)
+                    if gi == 0:
+                        notes.append(u'%d vigas separadas con esta trabe: cada una con sus filas (el paréntesis dice '
+                                     u'los ejes de sus extremos)' % len(good))
+                tys = []
+                for c in info['chain']:
+                    t_ = type_name(c['elem'])
+                    if t_ not in tys:
+                        tys.append(t_)
+                if len(tys) > 1:
+                    notes.append(u'secciones: %s (se arman juntas; los bastones pasan el cambio de sección)'
+                                 % u' + '.join(tys))
+                if bad and gi == 0:
+                    notes.append(u'%d trabe(s) no se pudieron analizar' % sum(len(e) for e in bad))
+                note = u'; '.join(notes)
+                for i in range(model.n_spans):
+                    fa, fb = model.span_faces(i)
+                    sc = model.sec(i)
+                    rows.append([lab, name, i + 1, node_txt(model, i), node_txt(model, i + 1),
+                                 round((fb - fa) / 100.0, 2), u'%sx%s' % (G.fcm_(round(sc['b'], 1)), G.fcm_(round(sc['h'], 1))),
+                                 u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', u'', note if i == 0 else u''])
+                    total += 1
     cfg_rows = [[u'Parámetro', u'Valor', u'Notas']] + [[s[1], s[2], s[3]] for s in C.SETTINGS]
     X.write_book(path, [
         (SHEET, rows, {'widths': [c[2] for c in C.COLUMNS], 'grey_cols': [3, 4, 5, 6], 'filter': True}),
@@ -475,7 +608,16 @@ def run(doc, uidoc, apply_mode):
     plan, report, fatal = [], [], []
     if base_err:
         fatal.append(u'Configuración: %s' % base_err)
+    grids = grid_lines(doc)
+    # selectores usados por cada trabe ('EJE-10 (K-H)'): las filas sin parentesis arman las demas vigas
+    sels = {}
     for lv_txt, tb, grows in groups:
+        nm, sel = C.split_selector(tb)
+        if sel:
+            sels.setdefault((C.fold(lv_txt), C.norm_beam(nm)), []).append(sel)
+    for lv_txt, tb, grows in groups:
+        tb_full = tb
+        tb, sel = C.split_selector(tb)
         lvs, errs = C.resolve_levels(lv_txt, [(n, z) for n, z, _ in levels])
         r0 = grows[0].get('_row')
         for e in errs:
@@ -488,7 +630,8 @@ def run(doc, uidoc, apply_mode):
                 report.append({'nivel': C.level_label(name), 'trabe': tb, 'estado': u'Error',
                                'errores': [u'fila %s: no hay trabes tipo "%s" en la familia "%s"' % (r0, tb, fam)]})
                 continue
-            plan.append((tb, grows, name, z, level, fam, beams))
+            others = [] if sel else sels.get((C.fold(lv_txt), C.norm_beam(tb)), [])
+            plan.append((tb, grows, name, z, level, fam, beams, sel, others, tb_full))
     if not plan:
         _print_report(report, fatal, apply_mode, path)
         return
@@ -510,14 +653,24 @@ def run(doc, uidoc, apply_mode):
         tg.Start()
     try:
         with SafeProgress(u'Armando trabes ({value} de {max_value})') as pb:
-            for k, (tb, grows, name, z, level, fam, beams) in enumerate(plan):
+            for k, (tb, grows, name, z, level, fam, beams, sel, others, tb_full) in enumerate(plan):
                 if pb.cancelled:
                     fatal.append(u'Cancelado por el usuario después de %d trabes.' % k)
                     break
                 pb.update_progress(k + 1, len(plan))
                 chs = chains(doc, beams)
-                for ci, (info, errs) in enumerate(chs):
-                    tag = (u' (%d/%d)' % (ci + 1, len(chs))) if len(chs) > 1 else u''
+                claimed = set()
+                for o in others:
+                    for i, _x in (pick_chains(chs, o, grids)[0] or []):
+                        claimed.add(i)
+                picked, perr = pick_chains(chs, sel, grids, claimed)
+                if perr:
+                    report.append({'nivel': C.level_label(name), 'trabe': tb_full, 'estado': u'Error',
+                                   'errores': [u'fila %s: %s' % (grows[0].get('_row'), perr)]})
+                    continue
+                for ci, (info, errs) in picked:
+                    lb = chain_label(info, grids) if info is not None else u''
+                    tag = (u' (%s)' % (lb or u'viga %d' % (ci + 1))) if len(chs) > 1 else u''
                     report.append(_one(doc, tb, grows, name, z, level, beams, info, errs, tag, settings, base_cfg,
                                        bts_list, bts, hooks, hook_len, bt_elems, hook_elems, templates, replace,
                                        apply_mode, pname, pfmt))
@@ -541,7 +694,7 @@ def run(doc, uidoc, apply_mode):
 def _one(doc, tb, grows, name, z, level, beams, info, errs, tag, settings, base_cfg, bts_list, bts, hooks,
          hook_len, bt_elems, hook_elems, templates, replace, apply_mode, pname, pfmt):
     lab = C.level_label(name)
-    rec = {'nivel': lab, 'trabe': (type_name(beams[0]) or tb) + tag, 'estado': u'', 'tramos': 0, 'kg': 0.0,
+    rec = {'nivel': lab, 'trabe': (tb if C.is_mark(tb) else (type_name(beams[0]) or tb)) + tag, 'estado': u'', 'tramos': 0, 'kg': 0.0,
            'errores': [], 'avisos': [], 'creados': 0, 'borrados': 0,
            'montaje': C.assembly_name(settings.get('montaje_fmt'), C.beam_mark(type_name(beams[0]) or tb), name, z)
            if not C.is_no(settings.get('montaje') or u'Sí') else u''}
