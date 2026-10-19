@@ -341,6 +341,30 @@ def pick_chains(chs, sel, grids, claimed=()):
     return [idx[i] for sc, i in scored if sc == best], None
 
 
+def clean_tool_rebar(doc, elems):
+    """Borra el acero que hizo la herramienta en esas trabes (todas las de la viga completa). Se usa antes de
+    armar una viga por partes ([S..] / [T..]): asi no queda acero de corridas anteriores (p. ej. la viga armada
+    unida) en trabes que ninguna parte vuelve a armar o que cambiaron de parte."""
+    ids = List[ElementId]()
+    try:
+        for rb in AL.hosted(elems):
+            if AL.comment(rb).startswith(R.TAG):
+                ids.Add(rb.Id)
+    except Exception:
+        return 0
+    if not ids.Count:
+        return 0
+    t = Transaction(doc, u'Limpiar armado previo de la viga')
+    t.Start()
+    try:
+        doc.Delete(ids)
+        t.Commit()
+    except Exception:
+        t.RollBack()
+        return 0
+    return ids.Count
+
+
 def make_model(info):
     """Igual que la ventana de Armado Viga (bv_main.Session.load)."""
     model = G.BeamModel(info['b'], info['h'], info['L'], info['supports'], parts=info.get('parts'),
@@ -656,6 +680,7 @@ def run(doc, uidoc, apply_mode):
     if apply_mode:
         tg = TransactionGroup(doc, TITLE)
         tg.Start()
+    cleaned = set()                 # trabes ya limpiadas en esta corrida (vigas armadas por partes)
     try:
         with SafeProgress(u'Armando trabes ({value} de {max_value})') as pb:
             for k, (tb, grows, name, z, level, fam, beams, sel, others, tb_full, secs, spans_sel) in enumerate(plan):
@@ -674,6 +699,12 @@ def run(doc, uidoc, apply_mode):
                                    'errores': [u'fila %s: %s' % (grows[0].get('_row'), perr)]})
                     continue
                 for ci, (info, errs) in picked:
+                    n_clean = 0
+                    if (secs or spans_sel) and apply_mode and replace and info is not None:
+                        full = [c['elem'] for c in info['chain'] if R.eid_int(c['elem'].Id) not in cleaned]
+                        if full:
+                            n_clean = clean_tool_rebar(doc, full)
+                            cleaned.update(R.eid_int(e.Id) for e in full)
                     lb = chain_label(info, grids) if info is not None else u''
                     tag = (u' (%s)' % (lb or u'viga %d' % (ci + 1))) if len(chs) > 1 else u''
                     if secs and info is not None:
@@ -719,9 +750,13 @@ def run(doc, uidoc, apply_mode):
                             info, errs = R.analyze_chain(doc, sub)
                         except Exception as ex:
                             info, errs = None, [(sub[0], u'%s' % ex)]
-                    report.append(_one(doc, tb, grows, name, z, level, beams, info, errs, tag, settings, base_cfg,
-                                       bts_list, bts, hooks, hook_len, bt_elems, hook_elems, templates, replace,
-                                       apply_mode, pname, pfmt))
+                    rec_ = _one(doc, tb, grows, name, z, level, beams, info, errs, tag, settings, base_cfg,
+                                bts_list, bts, hooks, hook_len, bt_elems, hook_elems, templates, replace,
+                                apply_mode, pname, pfmt)
+                    if n_clean:
+                        rec_['avisos'].insert(0, u'se borraron %d elementos de armado previo de toda la viga '
+                                                 u'(corridas anteriores) antes de armar por partes' % n_clean)
+                    report.append(rec_)
         if tg is not None:
             if any(r['estado'] == u'Creado' for r in report):
                 if not C.is_no(settings.get('montaje') or u'Sí'):
