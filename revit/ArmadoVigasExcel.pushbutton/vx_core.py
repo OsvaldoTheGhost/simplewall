@@ -155,6 +155,41 @@ def split_sections(name):
     return m.group(1).strip(), nums
 
 
+def part_of_elements(ranges, nodes, a0, b0):
+    """Trabes (rangos (s0, s1) cm a lo largo de la viga) que forman la parte de los tramos a0..b0 (indices).
+    nodes: [(s0, s1)] de los apoyos. Los tramos se reparten a la mitad de cada apoyo; cada trabe va a UNA sola
+    parte: donde queda la mayor parte de su largo y, si queda justo a la mitad (trabe sobre el apoyo que las
+    separa), a la parte siguiente. Devuelve (indices de la parte, indices de trabes que siguen de largo por un
+    tramo de la otra parte: hay que dividirlas en Revit)."""
+    mids = [(n0 + n1) / 2.0 for n0, n1 in nodes]
+    lo = mids[a0] if a0 > 0 else -1e12
+    hi = mids[b0 + 1] if b0 + 1 < len(nodes) - 1 else 1e12
+
+    def spans_len(a, b, lo_, hi_):
+        """largo de [a, b] dentro de [lo_, hi_] que cae en claros (fuera de los apoyos)."""
+        x0, x1 = max(a, lo_), min(b, hi_)
+        if x1 <= x0:
+            return 0.0
+        tot = x1 - x0
+        for n0, n1 in nodes:
+            tot -= max(0.0, min(x1, n1) - max(x0, n0))
+        return max(tot, 0.0)
+
+    out, cross = [], []
+    for k, (a, b) in enumerate(ranges):
+        ln = max(b - a, 1e-6)
+        inside = max(0.0, min(b, hi) - max(a, lo))
+        frac = inside / ln
+        mid = (a + b) / 2.0
+        take = frac > 0.5 + 1e-3 or (abs(frac - 0.5) <= 1e-3 and abs(mid - lo) <= abs(mid - hi))
+        if not take:
+            continue
+        out.append(k)
+        if spans_len(a, b, -1e12, lo) > 30.0 or spans_len(a, b, hi, 1e12) > 30.0:
+            cross.append(k)
+    return out, cross
+
+
 def split_spans_sel(name):
     """'EJE-J [T1-2]' -> [0, 1] (indices de tramo); 'EJE-J [T3]' -> [2]; sin T -> [].
     Arma solo las trabes de esos tramos como una viga aparte (piezas separadas en el plano)."""

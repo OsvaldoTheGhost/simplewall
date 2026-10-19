@@ -699,17 +699,13 @@ def run(doc, uidoc, apply_mode):
                                            'errores': [u'fila %s: la viga tiene %d tramos; no hay tramo %s' %
                                                        (grows[0].get('_row'), ns, u', '.join(u'%d' % i for i in bad_idx))]})
                             continue
-                        lo = m0.nodes[min(spans_sel)].s0
-                        hi = m0.nodes[max(spans_sel) + 1].s1
+                        # cada trabe pertenece a UNA sola parte (ver C.part_of_elements)
+                        a0, b0 = min(spans_sel), max(spans_sel)
                         parts = info.get('parts') or []
-                        sub, cross = [], []
-                        for c, q in zip(info['chain'], parts):
-                            a_, b_ = q[0], q[1]
-                            mid_ = (a_ + b_) / 2.0
-                            if lo - 1.0 <= mid_ <= hi + 1.0:
-                                sub.append(c['elem'])
-                                if a_ < lo - 30.0 or b_ > hi + 30.0:
-                                    cross.append(R.eid_int(c['elem'].Id))
+                        rng = [(q[0], q[1]) for q in parts]
+                        idx_in, idx_x = C.part_of_elements(rng, [(n.s0, n.s1) for n in m0.nodes], a0, b0)
+                        sub = [info['chain'][i]['elem'] for i in idx_in]
+                        cross = [R.eid_int(info['chain'][i]['elem'].Id) for i in idx_x]
                         tag += u' [T%s]' % u','.join(u'%d' % (i + 1) for i in spans_sel)
                         if not sub or cross:
                             report.append({'nivel': C.level_label(name), 'trabe': tb_full, 'estado': u'Error',
