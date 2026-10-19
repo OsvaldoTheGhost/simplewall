@@ -25,3 +25,10 @@ VARILLA TRABE / H_COLUMNA / COTAS-TR).
   estribos escritos grupo por grupo desde cada apoyo para reproducir los del plano.
 - El refuerzo "al centro" se recorta a los apoyos del tramo: las varillas que pasan el apoyo vecino van como
   bastón en el apoyo (Roof EJE-11 t4, Techos T-EJE K t3).
+
+## Secciones separadas en el plano
+
+El botón une las secciones de una trabe que se tocan en el modelo. Donde el plano las dibuja como vigas
+separadas se arman por partes con corchetes: `T-5 (viga 2) [S1, S2]` / `[S3]`, `T-6 (viga 2) [S2]` / `[S3]`,
+`EJE-5 [S1]` / `[S2]` (Roof) y `T- EJE 3 [S2]` / `[S1]` (Techos). Siguen unidas (continuas en el plano):
+EJE-B, EJE-1', EJE-2, T-11.

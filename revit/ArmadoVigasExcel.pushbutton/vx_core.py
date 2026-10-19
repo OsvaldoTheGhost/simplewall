@@ -137,6 +137,24 @@ def norm_beam(name):
 
 
 _SEL = re.compile(r'^(.*?)\s*\(\s*([^()]*?)\s*\)\s*$')
+_SECS = re.compile(r'^(.*?)\s*\[\s*([^\[\]]*?)\s*\]\s*$')
+
+
+def split_sections(name):
+    """'T-5 (viga 2) [S1, S2]' -> ('T-5 (viga 2)', [1, 2]); sin corchetes -> (nombre, []).
+    Los corchetes arman solo esas secciones de la viga, como una viga aparte (lo que en el plano esta separado)."""
+    t = clean(name)
+    m = _SECS.match(t)
+    if not m or not m.group(1):
+        return t, []
+    nums = [int(x) for x in re.findall(r'\d+', m.group(2))]
+    return m.group(1).strip(), nums
+
+
+def section_no(type_name):
+    """'T-5 Seccion 3' -> 3; 'T-5' -> 0."""
+    m = re.search(r'(?:secci[oó]n|secc?\.?|\bs)\s*(\d+)\s*$', fold(type_name))
+    return int(m.group(1)) if m else 0
 
 
 def split_selector(name):
