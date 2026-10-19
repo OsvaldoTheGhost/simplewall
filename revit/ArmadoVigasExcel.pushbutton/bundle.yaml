@@ -1,0 +1,10 @@
+title: "Armado\nTrabes Excel"
+tooltip: >-
+  Arma muchas trabes de una vez desde una tabla de Excel, con el mismo motor de Armado Viga.
+  1) Generar plantilla: lee las trabes de uno o varios niveles (familias "Trabes N+x.xx") y escribe
+  una fila por tramo con sus apoyos, longitud y sección.
+  2) Llene el armado como viene en el plano: Niveles N2-N4, corridos 3#4, bastones "1#4 100/100",
+  refuerzo al centro "2#4 130", estribos "E#3 11@10 @20 11@10", estribos sobre muro "@20".
+  3) Revisar (no crea nada) y 4) Aplicar: crea el armado en todos los niveles indicados,
+  llena el parámetro Nivel de las varillas y todo se deshace con un solo Ctrl+Z.
+author: Osvaldo
