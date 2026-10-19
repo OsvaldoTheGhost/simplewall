@@ -17,3 +17,11 @@ VARILLA TRABE / H_COLUMNA / COTAS-TR).
 - Piel `#3@30` en todas (una varilla por cara a cada 30 cm; diámetro supuesto #3).
 - T-6 (viga 2): `E#3 11@10,5@15 @20`.
 - Tramos que el plano no detalla (EJE-5 t4-t5, T-5 viga 2 t5-t6, T-6 viga 2 t2-t3): supuestos, ver Notas.
+
+## Techos (N11)
+
+- `Armado_trabes_Nivel_Techos_N11.xlsx` desde `Trabes_Techos_N11.dwg`, mismo criterio (piel `#3@30`).
+- Tramos largos del modelo que abarcan varios claros del plano (T-1 t2, T-2 t1, T-6 t1, EJE 8 t1, EJE J t2):
+  estribos escritos grupo por grupo desde cada apoyo para reproducir los del plano.
+- El refuerzo "al centro" se recorta a los apoyos del tramo: las varillas que pasan el apoyo vecino van como
+  bastón en el apoyo (Roof EJE-11 t4, Techos T-EJE K t3).
